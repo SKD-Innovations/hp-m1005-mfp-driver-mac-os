@@ -26,7 +26,7 @@ PAPPL_STATIC_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_STATIC) \
 	-framework IOKit -framework Security -lpam -ldl -lpthread
 PHASE5_APP := $(BUILD)/M1005Printer.app
 PHASE5_CONTENTS := $(PHASE5_APP)/Contents
-PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-0.5.1-unsigned.pkg
+PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-0.5.2-unsigned.pkg
 
 .PHONY: all clean phase2 phase2-test phase3 phase3-test phase4 phase4-test \
 	phase5 phase5-test phase5-package phase5-release probe claim test validate
@@ -109,7 +109,7 @@ $(BUILD)/m1005-setup: macos/M1005SetupApp.swift | $(BUILD)
 
 $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		$(BUILD)/m1005-xqx-encode macos/Info.plist \
-		macos/com.m1005printer.service.v6.plist macos/entitlements.plist \
+		macos/com.m1005printer.service.v7.plist macos/entitlements.plist \
 		macos/SOURCE.md Makefile $(wildcard vendor/foo2xqx/*) \
 		vendor/foo2xqx/COPYING vendor/foo2xqx/README.md \
 		external/pappl/LICENSE external/pappl/NOTICE
@@ -124,7 +124,7 @@ $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		"$(PHASE5_CONTENTS)/Resources/m1005-printer-service"
 	cp $(BUILD)/m1005-xqx-encode \
 		"$(PHASE5_CONTENTS)/Resources/m1005-xqx-encode"
-	cp macos/com.m1005printer.service.v6.plist \
+	cp macos/com.m1005printer.service.v7.plist \
 		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
 	cp vendor/foo2xqx/COPYING \
 		"$(PHASE5_CONTENTS)/Resources/Licenses/foo2xqx-GPL-2.0.txt"
@@ -149,7 +149,7 @@ $(PHASE5_PACKAGE): $(PHASE5_APP)
 	rm -f "$@"
 	COPYFILE_DISABLE=1 pkgbuild --component "$(PHASE5_APP)" \
 		--install-location /Applications \
-		--identifier com.m1005printer.pkg --version 0.5.1 "$@"
+		--identifier com.m1005printer.pkg --version 0.5.2 "$@"
 
 phase5-package: $(PHASE5_PACKAGE)
 

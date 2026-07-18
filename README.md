@@ -169,12 +169,14 @@ notices.
 
 The development integration passed live service, queue, PDF-to-Apple-Raster,
 encoder, USB, and uninstall/reinstall checks. A later grayscale document
-exposed a constant-threshold defect in version 0.5.0. Version 0.5.1 restores
-PAPPL's full document/photo halftone matrices and configures both the service
-and macOS queue for monochrome High quality at 600 dpi. Automated and live IPP
-validation pass, and the user confirmed that the original grayscale photo now
-prints correctly. Developer ID signing and Apple notarization remain pending
-because no Developer ID identities are installed on this Mac.
+exposed a constant-threshold defect in version 0.5.0. Version 0.5.2 restores
+PAPPL's full document/photo halftone matrices, removes application-visible
+bi-level output, and configures both the service and macOS queue for tonal
+monochrome High quality at 600 dpi. Automated and live IPP validation pass, and
+the user confirmed that the original grayscale photo prints correctly from
+Preview and from Adobe Acrobat Reader both with and without its grayscale
+checkbox. Developer ID signing and Apple notarization remain pending because
+no Developer ID identities are installed on this Mac.
 `make phase5-release` performs the complete signed/notarized release workflow
 once those credentials are available.
 

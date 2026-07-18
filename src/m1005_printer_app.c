@@ -16,7 +16,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define APP_VERSION "0.5.1"
+#define APP_VERSION "0.5.2"
 #define DRIVER_NAME "hp-laserjet-m1005-600dpi"
 #define XQX_MIME_TYPE "application/vnd.hp-xqx"
 #define A4_WIDTH 4960U
@@ -403,8 +403,7 @@ static bool driver_callback(pappl_system_t *system, const char *driver_name,
     driver_data->quality_default = IPP_QUALITY_HIGH;
     driver_data->scaling_default = PAPPL_SCALING_AUTO;
 
-    driver_data->color_supported =
-        PAPPL_COLOR_MODE_BI_LEVEL | PAPPL_COLOR_MODE_MONOCHROME;
+    driver_data->color_supported = PAPPL_COLOR_MODE_MONOCHROME;
     driver_data->color_default = PAPPL_COLOR_MODE_MONOCHROME;
     driver_data->raster_types = PAPPL_PWG_RASTER_TYPE_BLACK_1;
     driver_data->force_raster_type = PAPPL_PWG_RASTER_TYPE_BLACK_1;
@@ -485,7 +484,8 @@ static int dither_self_test(void) {
         memcmp(original_photo, driver_data.pdither, sizeof(original_photo)) !=
             0 ||
         graphics_unique < 200 || photo_unique != 256 ||
-        driver_data.quality_default != IPP_QUALITY_HIGH) {
+        driver_data.quality_default != IPP_QUALITY_HIGH ||
+        driver_data.color_supported != PAPPL_COLOR_MODE_MONOCHROME) {
         fprintf(stderr,
                 "Invalid halftone configuration (%u graphics levels, %u "
                 "photo levels).\n",
@@ -494,7 +494,7 @@ static int dither_self_test(void) {
     }
 
     printf("halftone=enabled\ngraphics-levels=%u\nphoto-levels=%u\n"
-           "default-quality=high\n",
+           "default-quality=high\ncolor-modes=monochrome\n",
            graphics_unique, photo_unique);
     return 0;
 }

@@ -3,7 +3,7 @@ import Foundation
 import ServiceManagement
 
 private enum Product {
-    static let servicePlist = "com.m1005printer.service.v6.plist"
+    static let servicePlist = "com.m1005printer.service.v7.plist"
     static let queueName = "HP_LaserJet_M1005"
     static let printerName = "HP LaserJet M1005 MFP (USB)"
     static let printerURI =

@@ -9,9 +9,10 @@
 - Phase 4: complete; cancellation-aware USB retries, endpoint-stall handling,
   reconnect recovery, and printer power-cycle recovery validated.
 - Phase 5: development implementation and live integration complete. Version
-  0.5.1 fixes a grayscale threshold defect and is installed at 600 dpi/High;
-  physical grayscale revalidation passed. Developer ID signing/notarization
-  remain pending. See `PHASE5_RESULTS.md`.
+  0.5.2 fixes grayscale thresholding, removes application-visible bi-level
+  output, and is installed at 600 dpi/High. Preview and both Adobe Acrobat
+  grayscale cases passed physically. Developer ID signing/notarization remain
+  pending. See `PHASE5_RESULTS.md`.
 - Phases 6–7: not started.
 
 No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
@@ -173,9 +174,10 @@ live IPP, and physical recovery record.
 Status: **development and physical pass on 2026-07-18; release credentials
 pending.** The native app, embedded LaunchAgent, local IPP queue, logs,
 uninstall flow, and unsigned installer are implemented and tested. Version
-0.5.1 restores the full halftone matrices, defaults both printer layers to 600
-dpi/High, and printed the original grayscale photo correctly. See
-`PHASE5_RESULTS.md`.
+0.5.2 restores the full halftone matrices, exposes tonal monochrome only,
+defaults both printer layers to 600 dpi/High, and printed the original
+grayscale photo correctly from Preview and both Adobe Acrobat checkbox modes.
+See `PHASE5_RESULTS.md`.
 
 Create a small Mac setup application that:
 

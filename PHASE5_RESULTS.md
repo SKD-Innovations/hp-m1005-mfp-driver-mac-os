@@ -2,7 +2,7 @@
 
 Date: 2026-07-18  
 Target: macOS 26.5.2, Apple Silicon (`arm64`)  
-Application version: `0.5.1`
+Application version: `0.5.2`
 
 ## Result
 
@@ -11,9 +11,12 @@ native setup app, background service, driverless macOS queue, managed state/log
 paths, uninstall flow, self-contained app bundle, and unsigned installer have
 passed on the target Mac. A later document with a grayscale portrait exposed a
 constant-threshold defect that was not visible in the initial Preview test.
-Version 0.5.1 corrects that defect and is installed. The same tonal document
-was reprinted and the user confirmed that its photo now reproduces correctly.
-The installed development build reports:
+Version 0.5.1 corrected the halftone defect. Version 0.5.2 also removes the
+application-visible binary mode so Adobe Acrobat Reader's grayscale checkbox
+cannot select or infer bi-level output. The same tonal document was reprinted
+from Acrobat both with and without that checkbox, and the user confirmed that
+its photo reproduces correctly in both cases. The installed development build
+reports:
 
 ```text
 usb=connected
@@ -122,6 +125,20 @@ live IPP checks pass. The user reprinted the original grayscale document and
 confirmed that the photo now prints correctly; grayscale physical acceptance
 therefore passed.
 
+### Adobe Acrobat Reader compatibility
+
+Acrobat Reader initially produced a binary-looking photo only when its
+**Print in grayscale (black and white)** checkbox was selected. Both affected
+and successful jobs reached the service as 8-bit `sGray`, `monochrome`, High
+quality jobs, showing that Acrobat changed the source pixels without supplying
+a distinct IPP/CUPS option for the driver to override.
+
+Version 0.5.2 removes `PAPPL_COLOR_MODE_BI_LEVEL` from the advertised
+capabilities. The live service now exposes only `monochrome`, while retaining
+High quality, 600 dpi, and the full 256-threshold photo matrix. After the queue
+was refreshed, the original document printed with correct grays from Acrobat
+both with the checkbox clear and with it selected.
+
 ## Automated verification
 
 `make test` includes Phase 5 checks for:
@@ -141,7 +158,7 @@ therefore passed.
 Build products:
 
 - `build/M1005Printer.app`
-- `build/HP-LaserJet-M1005-0.5.1-unsigned.pkg`
+- `build/HP-LaserJet-M1005-0.5.2-unsigned.pkg`
 
 The unsigned package is for local development only and must not be distributed
 as the release installer.

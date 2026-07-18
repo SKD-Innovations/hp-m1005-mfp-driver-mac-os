@@ -5,7 +5,7 @@ app="build/M1005Printer.app"
 setup="$app/Contents/MacOS/M1005 Setup"
 service="$app/Contents/Resources/m1005-printer-service"
 encoder="$app/Contents/Resources/m1005-xqx-encode"
-agent="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v6.plist"
+agent="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v7.plist"
 test_directory=$(mktemp -d /private/tmp/m1005-phase5-test.XXXXXX)
 trap 'rm -rf "$test_directory"' EXIT HUP INT TERM
 
@@ -17,12 +17,13 @@ plutil -lint "$app/Contents/Info.plist" >/dev/null
 plutil -lint "$agent" >/dev/null
 test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = \
     "com.m1005printer.setup"
-test "$("$service" --version)" = "0.5.1"
+test "$("$service" --version)" = "0.5.2"
 test "$(file "$setup" "$service" "$encoder" | grep -c 'arm64')" -eq 3
 dither_result=$("$service" --dither-self-test)
 test "$(printf '%s\n' "$dither_result" | grep -c '^halftone=enabled$')" -eq 1
 test "$(printf '%s\n' "$dither_result" | grep -c '^photo-levels=256$')" -eq 1
 test "$(printf '%s\n' "$dither_result" | grep -c '^default-quality=high$')" -eq 1
+test "$(printf '%s\n' "$dither_result" | grep -c '^color-modes=monochrome$')" -eq 1
 grep -q 'print-quality-default=high' macos/M1005SetupApp.swift
 grep -q 'cupsPrintQuality-default=High' macos/M1005SetupApp.swift
 

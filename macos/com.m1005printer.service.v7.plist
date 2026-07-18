@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.m1005printer.service.v6</string>
+  <string>com.m1005printer.service.v7</string>
   <key>BundleProgram</key>
   <string>Contents/Resources/m1005-printer-service</string>
   <key>RunAtLoad</key>
