@@ -40,3 +40,14 @@ build/m1005-usb --send artifacts/m1005-a4-600.xqx
 Run it only after reviewing the decoded XQX stream and confirming that A4 paper
 is loaded.
 
+## Validated initial capabilities
+
+- A4, monochrome, simplex
+- 600 x 600 dpi
+- Multiple pages in one XQX document
+- Printer-side copies
+
+Do not pass 300 x 300 directly to this version of `foo2xqx`. The encoder maps
+horizontal resolution to bits per pixel in units of 600 and produces invalid
+zero-valued video metadata at 300 dpi. The initial Printer Application will
+advertise 600 x 600 dpi only.

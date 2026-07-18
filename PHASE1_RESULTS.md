@@ -37,8 +37,6 @@ deterministic macOS raster -> foo2xqx/JBIG -> XQX -> libusb -> M1005
 
 ## Remaining Phase 1 checks
 
-- Printer-side copies
-- Resolution policy (native 600 dpi versus 300 dpi input upscaling)
 - Cancellation
 - Power cycle and USB reconnect
 
@@ -49,3 +47,23 @@ deterministic macOS raster -> foo2xqx/JBIG -> XQX -> libusb -> M1005
 - USB transfer: all 5030 bytes accepted on endpoint `0x02`
 - Physical result: exactly two correct pages, distinctly labeled `PAGE 1 OF 2`
   and `PAGE 2 OF 2`, printed in order
+
+## Printer-side copies test: PASS
+
+- XQX structure: one page record with `XQXI_COPIES = 2`
+- USB transfer: all 2717 bytes accepted on endpoint `0x02`
+- Physical result: exactly two identical, correct `PHASE 1 TEST` sheets
+- Implementation consequence: copies can be delegated to the M1005; raster pages
+  do not need to be duplicated by the Mac application
+
+## Resolution policy: PASS WITH 600-DPI-ONLY CAPABILITY
+
+- Native 600 x 600 dpi: physically validated with correct output
+- The model database declares a 600 x 600 dpi mechanism
+- The historical PPD exposes 600 x 600 and an enhanced 1200 x 600 mode, not
+  native 300 x 300
+- A local-only 300 x 300 encoder diagnostic produced invalid XQX metadata
+  (`VIDEO_BPP = 0`, `VIDEO_X = 0`); this stream was not sent to the printer
+- Implementation consequence: advertise 600 x 600 dpi only in the initial
+  Printer Application. If 300-dpi source content must be accepted, upscale it
+  to a 600-dpi raster before encoding.

@@ -134,7 +134,31 @@ static void print_port_status(libusb_device_handle *handle, int interface_number
            (status & 0x08) ? "no" : "yes");
 }
 
-static int send_file(libusb_device_handle *handle, uint8_t endpoint, const char *path) {
+static int soft_reset(libusb_device_handle *handle, int interface_number) {
+    int rc = libusb_control_transfer(
+        handle,
+        LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
+        2, 0, (uint16_t)interface_number, NULL, 0, TRANSFER_TIMEOUT_MS);
+    if (rc < 0) {
+        fprintf(stderr, "USB printer soft reset failed: %s\n", libusb_error_name(rc));
+        return 1;
+    }
+    printf("USB printer soft reset completed\n");
+    return 0;
+}
+
+static int device_reset(libusb_device_handle *handle) {
+    int rc = libusb_reset_device(handle);
+    if (rc != LIBUSB_SUCCESS) {
+        fprintf(stderr, "USB device reset failed: %s\n", libusb_error_name(rc));
+        return 1;
+    }
+    printf("USB device reset completed; the printer will re-enumerate\n");
+    return 0;
+}
+
+static int send_file(libusb_device_handle *handle, uint8_t endpoint, const char *path,
+                     size_t cancel_after, int *cancelled) {
     FILE *input = fopen(path, "rb");
     if (input == NULL) {
         fprintf(stderr, "cannot open %s: %s\n", path, strerror(errno));
@@ -147,6 +171,7 @@ static int send_file(libusb_device_handle *handle, uint8_t endpoint, const char 
     unsigned char buffer[TRANSFER_CHUNK];
     size_t total = 0;
     int result = 0;
+    *cancelled = 0;
     while (!interrupted) {
         size_t count = fread(buffer, 1, sizeof(buffer), input);
         if (count == 0) {
@@ -155,6 +180,10 @@ static int send_file(libusb_device_handle *handle, uint8_t endpoint, const char 
                 result = 1;
             }
             break;
+        }
+
+        if (cancel_after > 0 && total + count > cancel_after) {
+            count = cancel_after - total;
         }
 
         size_t offset = 0;
@@ -177,6 +206,10 @@ static int send_file(libusb_device_handle *handle, uint8_t endpoint, const char 
             offset += (size_t)transferred;
             total += (size_t)transferred;
         }
+        if (cancel_after > 0 && total >= cancel_after) {
+            *cancelled = 1;
+            break;
+        }
     }
 
 done:
@@ -186,30 +219,52 @@ done:
         return 130;
     }
     if (result == 0) {
-        printf("sent %zu bytes to endpoint 0x%02x\n", total, endpoint);
+        printf("%s %zu bytes on endpoint 0x%02x\n",
+               *cancelled ? "cancelled after" : "sent", total, endpoint);
     }
     return result;
 }
 
 static void usage(const char *program) {
     fprintf(stderr,
-            "usage: %s --probe | --claim | --send FILE\n"
+            "usage: %s --probe | --claim | --soft-reset | --device-reset | --send FILE | "
+            "--cancel-after BYTES FILE\n"
             "  --probe       enumerate descriptors without claiming an interface\n"
             "  --claim       claim interface 1, read status, and release it\n"
-            "  --send FILE   claim interface 1 and transmit an XQX stream\n",
+            "  --soft-reset  issue a USB printer-class soft reset\n"
+            "  --device-reset reset and re-enumerate the complete USB device\n"
+            "  --send FILE   claim interface 1 and transmit an XQX stream\n"
+            "  --cancel-after BYTES FILE\n"
+            "                stop after BYTES and reset/re-enumerate the USB device\n",
             program);
 }
 
 int main(int argc, char **argv) {
-    enum { MODE_NONE, MODE_PROBE, MODE_CLAIM, MODE_SEND } mode = MODE_NONE;
+    enum { MODE_NONE, MODE_PROBE, MODE_CLAIM, MODE_SOFT_RESET,
+           MODE_DEVICE_RESET, MODE_SEND, MODE_CANCEL } mode = MODE_NONE;
     const char *path = NULL;
+    size_t cancel_after = 0;
     if (argc == 2 && strcmp(argv[1], "--probe") == 0) {
         mode = MODE_PROBE;
     } else if (argc == 2 && strcmp(argv[1], "--claim") == 0) {
         mode = MODE_CLAIM;
+    } else if (argc == 2 && strcmp(argv[1], "--soft-reset") == 0) {
+        mode = MODE_SOFT_RESET;
+    } else if (argc == 2 && strcmp(argv[1], "--device-reset") == 0) {
+        mode = MODE_DEVICE_RESET;
     } else if (argc == 3 && strcmp(argv[1], "--send") == 0) {
         mode = MODE_SEND;
         path = argv[2];
+    } else if (argc == 4 && strcmp(argv[1], "--cancel-after") == 0) {
+        char *end = NULL;
+        unsigned long long parsed = strtoull(argv[2], &end, 10);
+        if (end == argv[2] || *end != '\0' || parsed == 0 || parsed > SIZE_MAX) {
+            fprintf(stderr, "invalid cancellation byte count: %s\n", argv[2]);
+            return 2;
+        }
+        mode = MODE_CANCEL;
+        cancel_after = (size_t)parsed;
+        path = argv[3];
     } else {
         usage(argv[0]);
         return 2;
@@ -303,15 +358,29 @@ int main(int argc, char **argv) {
     print_port_status(handle, interface_number);
 
     int result = 0;
-    if (mode == MODE_SEND) {
-        result = send_file(handle, bulk_out_endpoint, path);
-        print_port_status(handle, interface_number);
+    int did_device_reset = 0;
+    if (mode == MODE_SOFT_RESET) {
+        result = soft_reset(handle, interface_number);
+    } else if (mode == MODE_DEVICE_RESET) {
+        result = device_reset(handle);
+        did_device_reset = result == 0;
+    } else if (mode == MODE_SEND || mode == MODE_CANCEL) {
+        int cancelled = 0;
+        result = send_file(handle, bulk_out_endpoint, path, cancel_after, &cancelled);
+        if (cancelled || result == 130) {
+            result = device_reset(handle);
+            did_device_reset = result == 0;
+        } else {
+            print_port_status(handle, interface_number);
+        }
     }
 
-    rc = libusb_release_interface(handle, interface_number);
-    if (rc != LIBUSB_SUCCESS) {
-        fprintf(stderr, "warning: cannot release printer interface: %s\n",
-                libusb_error_name(rc));
+    if (!did_device_reset) {
+        rc = libusb_release_interface(handle, interface_number);
+        if (rc != LIBUSB_SUCCESS) {
+            fprintf(stderr, "warning: cannot release printer interface: %s\n",
+                    libusb_error_name(rc));
+        }
     }
     libusb_close(handle);
     libusb_unref_device(device);

@@ -80,6 +80,14 @@ validate-job-control: $(ARTIFACTS)/m1005-a4-600-2page.xqx $(ARTIFACTS)/m1005-a4-
 	@$(BUILD)/xqxdecode $(ARTIFACTS)/m1005-a4-600-2copies.xqx | grep -q 'XQXI_COPIES, 2'
 	shasum -a 256 $(ARTIFACTS)/m1005-a4-600-2page.xqx $(ARTIFACTS)/m1005-a4-600-2copies.xqx
 
+$(ARTIFACTS)/m1005-cancel-stress.pbm: $(BUILD)/generate-test-pbm | $(ARTIFACTS)
+	$< $@ 1 noise
+
+$(ARTIFACTS)/m1005-cancel-stress.xqx: $(ARTIFACTS)/m1005-cancel-stress.pbm $(BUILD)/foo2xqx
+	$(BUILD)/foo2xqx -r600x600 -g4960x7016 -p9 -m1 -n1 -d1 -s7 \
+		-u88x84 -l88x84 -L3 -T3 -J "M1005 Cancel Test" -U "Codex" \
+		< $< > $@
+
 probe: $(BUILD)/m1005-usb
 	$< --probe
 

@@ -99,6 +99,18 @@ static void draw_density_patch(int x, int y, int width, int height, int period) 
     }
 }
 
+static void add_deterministic_noise(void) {
+    uint32_t state = 0x4d313030u;
+    for (int y = 128; y < PAGE_HEIGHT - 128; ++y) {
+        for (int byte = 16; byte < ROW_BYTES - 16; ++byte) {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            page[(size_t)y * ROW_BYTES + byte] = (uint8_t)(state >> 24);
+        }
+    }
+}
+
 static int write_page(FILE *output, const char *path) {
     if (fprintf(output, "P4\n%d %d\n", PAGE_WIDTH, PAGE_HEIGHT) < 0 ||
         fwrite(page, ROW_BYTES, PAGE_HEIGHT, output) != PAGE_HEIGHT) {
@@ -147,13 +159,13 @@ static void render_page(int page_number, int page_count) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2 || argc > 3) {
-        fprintf(stderr, "usage: %s output.pbm [page-count]\n", argv[0]);
+    if (argc < 2 || argc > 4) {
+        fprintf(stderr, "usage: %s output.pbm [page-count [noise]]\n", argv[0]);
         return 2;
     }
 
     int page_count = 1;
-    if (argc == 3) {
+    if (argc >= 3) {
         char *end = NULL;
         long parsed = strtol(argv[2], &end, 10);
         if (end == argv[2] || *end != '\0' || parsed < 1 || parsed > 10) {
@@ -161,6 +173,15 @@ int main(int argc, char **argv) {
             return 2;
         }
         page_count = (int)parsed;
+    }
+
+    int noisy = 0;
+    if (argc == 4) {
+        if (strcmp(argv[3], "noise") != 0) {
+            fprintf(stderr, "the only supported pattern option is 'noise'\n");
+            return 2;
+        }
+        noisy = 1;
     }
 
     page = calloc((size_t)ROW_BYTES, PAGE_HEIGHT);
@@ -179,6 +200,9 @@ int main(int argc, char **argv) {
     int result = 0;
     for (int page_number = 1; page_number <= page_count; ++page_number) {
         render_page(page_number, page_count);
+        if (noisy) {
+            add_deterministic_noise();
+        }
         if (write_page(output, argv[1]) != 0) {
             result = 1;
             break;
