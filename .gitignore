@@ -4,3 +4,5 @@
 /build/
 /external/
 /upstream/
+
+.DS_Store
