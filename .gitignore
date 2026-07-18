@@ -1,0 +1,6 @@
+/artifacts/*.decode.txt
+/artifacts/*.pbm
+/artifacts/*.png
+/artifacts/*.xqx
+/build/
+/upstream/
