@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <mach-o/dyld.h>
 #include <pappl/pappl.h>
 #include <signal.h>
 #include <spawn.h>
@@ -10,11 +11,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
-#define APP_VERSION "0.4.0"
+#define APP_VERSION "0.5.1"
 #define DRIVER_NAME "hp-laserjet-m1005-600dpi"
 #define XQX_MIME_TYPE "application/vnd.hp-xqx"
 #define A4_WIDTH 4960U
@@ -23,6 +25,7 @@
 #define A4_BYTES_PER_LINE 620U
 
 extern char **environ;
+extern void _papplPrinterInitDriverData(pappl_pr_driver_data_t *data);
 
 typedef struct {
     FILE *pbm;
@@ -35,6 +38,26 @@ typedef struct {
 } m1005_job_data_t;
 
 static char encoder_path[PATH_MAX] = "build/m1005-xqx-encode";
+
+static bool make_directory_tree(const char *path) {
+    char current[PATH_MAX];
+    int written = snprintf(current, sizeof(current), "%s", path);
+    if (written < 0 || (size_t)written >= sizeof(current)) {
+        return false;
+    }
+
+    for (char *slash = current + 1; *slash != '\0'; ++slash) {
+        if (*slash != '/') {
+            continue;
+        }
+        *slash = '\0';
+        if (mkdir(current, 0700) < 0 && errno != EEXIST) {
+            return false;
+        }
+        *slash = '/';
+    }
+    return mkdir(current, 0700) == 0 || errno == EEXIST;
+}
 
 static void cleanup_job_data(m1005_job_data_t *job_data) {
     if (job_data == NULL) {
@@ -377,7 +400,7 @@ static bool driver_callback(pappl_system_t *system, const char *driver_name,
     driver_data->kind = PAPPL_KIND_DOCUMENT;
     driver_data->ppm = 14;
     driver_data->orient_default = IPP_ORIENT_NONE;
-    driver_data->quality_default = IPP_QUALITY_NORMAL;
+    driver_data->quality_default = IPP_QUALITY_HIGH;
     driver_data->scaling_default = PAPPL_SCALING_AUTO;
 
     driver_data->color_supported =
@@ -385,8 +408,6 @@ static bool driver_callback(pappl_system_t *system, const char *driver_name,
     driver_data->color_default = PAPPL_COLOR_MODE_MONOCHROME;
     driver_data->raster_types = PAPPL_PWG_RASTER_TYPE_BLACK_1;
     driver_data->force_raster_type = PAPPL_PWG_RASTER_TYPE_BLACK_1;
-    memset(driver_data->gdither, 127, sizeof(driver_data->gdither));
-    memset(driver_data->pdither, 127, sizeof(driver_data->pdither));
 
     driver_data->num_resolution = 1;
     driver_data->x_resolution[0] = 600;
@@ -425,6 +446,59 @@ static bool driver_callback(pappl_system_t *system, const char *driver_name,
     return true;
 }
 
+static int dither_self_test(void) {
+    pappl_pr_driver_data_t driver_data;
+    pappl_dither_t original_graphics;
+    pappl_dither_t original_photo;
+    ipp_t *driver_attributes = NULL;
+    bool graphics_values[256] = {false};
+    bool photo_values[256] = {false};
+    unsigned graphics_unique = 0;
+    unsigned photo_unique = 0;
+
+    _papplPrinterInitDriverData(&driver_data);
+    memcpy(original_graphics, driver_data.gdither, sizeof(original_graphics));
+    memcpy(original_photo, driver_data.pdither, sizeof(original_photo));
+
+    if (!driver_callback(NULL, DRIVER_NAME, NULL, NULL, &driver_data,
+                         &driver_attributes, NULL)) {
+        fputs("Unable to configure driver data for dither self-test.\n",
+              stderr);
+        return 1;
+    }
+
+    for (size_t index = 0; index < sizeof(driver_data.gdither); ++index) {
+        unsigned graphics = ((unsigned char *)driver_data.gdither)[index];
+        unsigned photo = ((unsigned char *)driver_data.pdither)[index];
+        if (!graphics_values[graphics]) {
+            graphics_values[graphics] = true;
+            graphics_unique++;
+        }
+        if (!photo_values[photo]) {
+            photo_values[photo] = true;
+            photo_unique++;
+        }
+    }
+
+    if (memcmp(original_graphics, driver_data.gdither,
+               sizeof(original_graphics)) != 0 ||
+        memcmp(original_photo, driver_data.pdither, sizeof(original_photo)) !=
+            0 ||
+        graphics_unique < 200 || photo_unique != 256 ||
+        driver_data.quality_default != IPP_QUALITY_HIGH) {
+        fprintf(stderr,
+                "Invalid halftone configuration (%u graphics levels, %u "
+                "photo levels).\n",
+                graphics_unique, photo_unique);
+        return 1;
+    }
+
+    printf("halftone=enabled\ngraphics-levels=%u\nphoto-levels=%u\n"
+           "default-quality=high\n",
+           graphics_unique, photo_unique);
+    return 0;
+}
+
 static void set_encoder_path(const char *program) {
     const char *override = getenv("M1005_ENCODER_PATH");
     if (override != NULL && override[0] != '\0') {
@@ -434,7 +508,12 @@ static void set_encoder_path(const char *program) {
 
     char resolved[PATH_MAX];
     if (realpath(program, resolved) == NULL) {
-        return;
+        char executable[PATH_MAX];
+        uint32_t executable_size = sizeof(executable);
+        if (_NSGetExecutablePath(executable, &executable_size) != 0 ||
+            realpath(executable, resolved) == NULL) {
+            return;
+        }
     }
     char *slash = strrchr(resolved, '/');
     if (slash == NULL) {
@@ -457,12 +536,7 @@ static int self_test(const char *input, const char *output) {
     return 0;
 }
 
-int main(int argc, char *argv[]) {
-    set_encoder_path(argv[0]);
-    if (argc == 4 && strcmp(argv[1], "--self-test") == 0) {
-        return self_test(argv[2], argv[3]);
-    }
-
+static int run_mainloop(int argc, char *argv[]) {
     m1005PapplUSBRegister();
     pappl_pr_driver_t drivers[] = {
         {DRIVER_NAME, "HP LaserJet M1005 MFP (600 dpi)", NULL, NULL}
@@ -471,4 +545,76 @@ int main(int argc, char *argv[]) {
                          "HP LaserJet M1005 MFP Printer Application",
                          (int)(sizeof(drivers) / sizeof(drivers[0])), drivers,
                          auto_add, driver_callback, NULL, NULL, NULL, NULL, NULL);
+}
+
+static int run_managed_service(char *program) {
+    const char *home = getenv("HOME");
+    if (home == NULL || home[0] != '/') {
+        fputs("HOME is not an absolute path; managed service cannot start.\n",
+              stderr);
+        return 1;
+    }
+
+    char data_directory[PATH_MAX];
+    char spool_option[PATH_MAX + 32];
+    char log_directory[PATH_MAX];
+    char log_option[PATH_MAX + 32];
+    int data_written = snprintf(data_directory, sizeof(data_directory),
+                                "%s/Library/Application Support/M1005Printer",
+                                home);
+    int spool_written = snprintf(spool_option, sizeof(spool_option),
+                                 "spool-directory=%s/spool", data_directory);
+    int log_written = snprintf(log_directory, sizeof(log_directory),
+                               "%s/Library/Logs/M1005Printer", home);
+    int option_written = snprintf(log_option, sizeof(log_option),
+                                  "log-file=%s/service.log", log_directory);
+    if (data_written < 0 || (size_t)data_written >= sizeof(data_directory) ||
+        spool_written < 0 || (size_t)spool_written >= sizeof(spool_option) ||
+        log_written < 0 || (size_t)log_written >= sizeof(log_directory) ||
+        option_written < 0 || (size_t)option_written >= sizeof(log_option) ||
+        !make_directory_tree(data_directory) ||
+        !make_directory_tree(log_directory)) {
+        fprintf(stderr, "Unable to create managed service directories: %s\n",
+                strerror(errno));
+        return 1;
+    }
+    if (setenv("XDG_CONFIG_HOME", data_directory, 1) < 0) {
+        fprintf(stderr, "Unable to configure managed service state path: %s\n",
+                strerror(errno));
+        return 1;
+    }
+
+    char *managed_argv[] = {
+        program,
+        "server",
+        "-o", spool_option,
+        "-o", "server-port=8765",
+        "-o", "log-level=info",
+        "-o", log_option,
+        "-o", "server-options=no-tls",
+        NULL
+    };
+    return run_mainloop(12, managed_argv);
+}
+
+int main(int argc, char *argv[]) {
+    set_encoder_path(argv[0]);
+    if (argc == 1 && strstr(argv[0], "m1005-printer-service") != NULL) {
+        return run_managed_service(argv[0]);
+    }
+    if (argc == 2 && strcmp(argv[1], "--usb-status") == 0) {
+        bool present = m1005PapplUSBIsPresent();
+        puts(present ? "connected" : "disconnected");
+        return present ? 0 : 1;
+    }
+    if (argc == 2 && strcmp(argv[1], "--managed-service") == 0) {
+        return run_managed_service(argv[0]);
+    }
+    if (argc == 2 && strcmp(argv[1], "--dither-self-test") == 0) {
+        return dither_self_test();
+    }
+    if (argc == 4 && strcmp(argv[1], "--self-test") == 0) {
+        return self_test(argv[2], argv[3]);
+    }
+    return run_mainloop(argc, argv);
 }

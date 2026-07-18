@@ -298,6 +298,21 @@ void m1005PapplUSBRegister(void) {
                          device_write, device_status, device_id);
 }
 
+bool m1005PapplUSBIsPresent(void) {
+    libusb_context *context = NULL;
+    if (libusb_init(&context) != LIBUSB_SUCCESS) {
+        return false;
+    }
+
+    libusb_device *device = find_device(context);
+    bool present = device != NULL;
+    if (device != NULL) {
+        libusb_unref_device(device);
+    }
+    libusb_exit(context);
+    return present;
+}
+
 void m1005PapplUSBBeginJob(pappl_device_t *device, pappl_job_t *job) {
     m1005_usb_device_t *usb = papplDeviceGetData(device);
     if (usb != NULL) {

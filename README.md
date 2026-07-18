@@ -148,3 +148,33 @@ the target Mac, so Phase 4 does not require a USBDriverKit extension.
 See `PHASE4_RESULTS.md` for the retry policy, automated fault coverage, live
 job sequence, physical-test record, and remaining Phase 7 fault-injection
 boundary.
+
+## Phase 5 macOS integration
+
+Phase 5 adds `build/M1005Printer.app`, a native arm64 setup/status app with an
+embedded `SMAppService` LaunchAgent. It detects the USB printer, manages the
+local IPP service and `HP_LaserJet_M1005` queue, displays logs, opens the PAPPL
+printer page, and removes the integration cleanly.
+
+Build and validate the development app and unsigned installer with:
+
+```sh
+make phase5-test
+make phase5-package
+```
+
+The embedded printer service is self-contained and has no Homebrew runtime
+dependency. The app includes the corresponding GPL encoder source and license
+notices.
+
+The development integration passed live service, queue, PDF-to-Apple-Raster,
+encoder, USB, and uninstall/reinstall checks. Physical acceptance also passed:
+an image printed from macOS Preview was reproduced perfectly, with the service
+logging successful Apple Raster conversion, encoding, and a 20,007-byte USB
+transfer. Developer ID signing and Apple notarization remain pending because
+no Developer ID identities are installed on this Mac. `make phase5-release`
+performs the complete signed/notarized release workflow once those local
+credentials are available.
+
+See `PHASE5_RESULTS.md` for installed paths, live results, build products,
+release requirements, and the exact signing/notarization boundary.

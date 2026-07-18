@@ -11,6 +11,7 @@
     "DES:HP LaserJet M1005 MFP;"
 
 void m1005PapplUSBRegister(void);
+bool m1005PapplUSBIsPresent(void);
 void m1005PapplUSBBeginJob(pappl_device_t *device, pappl_job_t *job);
 void m1005PapplUSBEndJob(pappl_device_t *device);
 ssize_t m1005PapplUSBWrite(pappl_device_t *device, const void *buffer,

@@ -9,6 +9,8 @@ LIBUSB_CFLAGS := $(shell pkg-config --cflags libusb-1.0)
 LIBUSB_LIBS := $(shell pkg-config --libs libusb-1.0)
 OPENSSL_CFLAGS := $(shell pkg-config --cflags openssl)
 OPENSSL_LIBS := $(shell pkg-config --libs openssl)
+LIBUSB_STATIC := $(shell pkg-config --variable=libdir libusb-1.0)/libusb-1.0.a
+OPENSSL_STATIC_DIR := $(shell pkg-config --variable=libdir openssl)
 CUPS_CFLAGS := $(shell cups-config --cflags)
 CUPS_LIBS := $(shell cups-config --libs)
 PAPPL_DIR := external/pappl
@@ -18,9 +20,16 @@ PAPPL_CFLAGS := -I$(PAPPL_DIR) $(CUPS_CFLAGS) $(LIBUSB_CFLAGS) $(OPENSSL_CFLAGS)
 PAPPL_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_LIBS) $(OPENSSL_LIBS) \
 	-framework AppKit -framework CoreFoundation -framework SystemConfiguration \
 	-framework IOKit -lpam -ldl -lpthread
+PAPPL_STATIC_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_STATIC) \
+	$(OPENSSL_STATIC_DIR)/libssl.a $(OPENSSL_STATIC_DIR)/libcrypto.a \
+	-framework AppKit -framework CoreFoundation -framework SystemConfiguration \
+	-framework IOKit -framework Security -lpam -ldl -lpthread
+PHASE5_APP := $(BUILD)/M1005Printer.app
+PHASE5_CONTENTS := $(PHASE5_APP)/Contents
+PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-0.5.1-unsigned.pkg
 
 .PHONY: all clean phase2 phase2-test phase3 phase3-test phase4 phase4-test \
-	probe claim test validate
+	phase5 phase5-test phase5-package phase5-release probe claim test validate
 
 all: phase2 phase3 $(BUILD)/m1005-usb $(BUILD)/generate-test-pbm \
 	$(BUILD)/generate-test-raster
@@ -30,6 +39,8 @@ phase2: $(BUILD)/m1005-xqx-encode $(BUILD)/m1005-xqx-decode
 phase3: $(BUILD)/m1005-printer-app
 
 phase4: phase3 $(BUILD)/test-m1005-usb-io
+
+phase5: $(PHASE5_APP)
 
 $(BUILD) $(ARTIFACTS):
 	mkdir -p $@
@@ -80,6 +91,70 @@ $(BUILD)/m1005-printer-app: src/m1005_printer_app.c src/m1005_pappl_usb.c \
 		$(PAPPL_LIB) $(BUILD)/m1005-xqx-encode | $(BUILD)
 	$(CC) $(CFLAGS) $(PAPPL_CFLAGS) src/m1005_printer_app.c \
 		src/m1005_pappl_usb.c src/m1005_usb_io.c -o $@ $(PAPPL_LIBS)
+
+$(BUILD)/m1005-printer-service: src/m1005_printer_app.c \
+		src/m1005_pappl_usb.c src/m1005_pappl_usb.h src/m1005_usb_io.c \
+		src/m1005_usb_io.h $(PAPPL_LIB) $(BUILD)/m1005-xqx-encode | $(BUILD)
+	$(CC) $(CFLAGS) $(PAPPL_CFLAGS) src/m1005_printer_app.c \
+		src/m1005_pappl_usb.c src/m1005_usb_io.c -o $@ $(PAPPL_STATIC_LIBS)
+
+$(BUILD)/m1005-setup: macos/M1005SetupApp.swift | $(BUILD)
+	mkdir -p $(BUILD)/swift-module-cache
+	CLANG_MODULE_CACHE_PATH="$(abspath $(BUILD)/swift-module-cache)" \
+		SWIFT_MODULE_CACHE_PATH="$(abspath $(BUILD)/swift-module-cache)" \
+		xcrun swiftc -module-cache-path "$(abspath $(BUILD)/swift-module-cache)" \
+		-swift-version 5 -O -parse-as-library \
+		-target arm64-apple-macosx26.0 -framework AppKit \
+		-framework ServiceManagement $< -o $@
+
+$(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
+		$(BUILD)/m1005-xqx-encode macos/Info.plist \
+		macos/com.m1005printer.service.v5.plist macos/entitlements.plist \
+		macos/SOURCE.md Makefile $(wildcard vendor/foo2xqx/*) \
+		vendor/foo2xqx/COPYING vendor/foo2xqx/README.md \
+		external/pappl/LICENSE external/pappl/NOTICE
+	rm -rf "$@"
+	mkdir -p "$(PHASE5_CONTENTS)/MacOS" \
+		"$(PHASE5_CONTENTS)/Library/LaunchAgents" \
+		"$(PHASE5_CONTENTS)/Resources/Licenses" \
+		"$(PHASE5_CONTENTS)/Resources/Source"
+	cp macos/Info.plist "$(PHASE5_CONTENTS)/Info.plist"
+	cp $(BUILD)/m1005-setup "$(PHASE5_CONTENTS)/MacOS/M1005 Setup"
+	cp $(BUILD)/m1005-printer-service \
+		"$(PHASE5_CONTENTS)/Resources/m1005-printer-service"
+	cp $(BUILD)/m1005-xqx-encode \
+		"$(PHASE5_CONTENTS)/Resources/m1005-xqx-encode"
+	cp macos/com.m1005printer.service.v5.plist \
+		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
+	cp vendor/foo2xqx/COPYING \
+		"$(PHASE5_CONTENTS)/Resources/Licenses/foo2xqx-GPL-2.0.txt"
+	cp vendor/foo2xqx/README.md \
+		"$(PHASE5_CONTENTS)/Resources/Licenses/foo2xqx-README.md"
+	cp external/pappl/LICENSE \
+		"$(PHASE5_CONTENTS)/Resources/Licenses/PAPPL-LICENSE.txt"
+	cp external/pappl/NOTICE \
+		"$(PHASE5_CONTENTS)/Resources/Licenses/PAPPL-NOTICE.txt"
+	cp -R vendor/foo2xqx "$(PHASE5_CONTENTS)/Resources/Source/foo2xqx"
+	cp Makefile "$(PHASE5_CONTENTS)/Resources/Source/Makefile"
+	cp macos/SOURCE.md "$(PHASE5_CONTENTS)/Resources/Source/README.md"
+	xattr -cr "$@"
+	codesign --force --options runtime --timestamp=none --sign - \
+		"$(PHASE5_CONTENTS)/Resources/m1005-xqx-encode"
+	codesign --force --options runtime --timestamp=none --sign - \
+		"$(PHASE5_CONTENTS)/Resources/m1005-printer-service"
+	codesign --force --options runtime --timestamp=none --sign - \
+		--entitlements macos/entitlements.plist "$@"
+
+$(PHASE5_PACKAGE): $(PHASE5_APP)
+	rm -f "$@"
+	COPYFILE_DISABLE=1 pkgbuild --component "$(PHASE5_APP)" \
+		--install-location /Applications \
+		--identifier com.m1005printer.pkg --version 0.5.1 "$@"
+
+phase5-package: $(PHASE5_PACKAGE)
+
+phase5-release: phase5
+	sh scripts/release_macos.sh
 
 $(BUILD)/test-m1005-usb-io: tests/test_m1005_usb_io.c src/m1005_usb_io.c \
 		src/m1005_usb_io.h | $(BUILD)
@@ -160,7 +235,10 @@ phase3-test: phase3 $(ARTIFACTS)/m1005-a4-600.pbm \
 phase4-test: phase4
 	$(BUILD)/test-m1005-usb-io
 
-test: phase2-test phase3-test phase4-test validate-job-control
+phase5-test: phase5
+	sh tests/test_phase5.sh
+
+test: phase2-test phase3-test phase4-test phase5-test validate-job-control
 
 clean:
 	rm -rf $(BUILD) $(ARTIFACTS)

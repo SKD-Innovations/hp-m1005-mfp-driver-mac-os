@@ -8,7 +8,10 @@
   identically through the IPP Printer Application on the physical M1005.
 - Phase 4: complete; cancellation-aware USB retries, endpoint-stall handling,
   reconnect recovery, and printer power-cycle recovery validated.
-- Phases 5–7: not started.
+- Phase 5: development implementation and live integration complete; physical
+  acceptance passed with a real image printed perfectly from macOS Preview.
+  Developer ID signing/notarization remain pending. See `PHASE5_RESULTS.md`.
+- Phases 6–7: not started.
 
 No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
 
@@ -165,6 +168,12 @@ live IPP, and physical recovery record.
 - If libusb cannot reliably claim the interface, build a minimal USBDriverKit extension and request Apple’s entitlement.
 
 ### Phase 5 — macOS integration and packaging
+
+Status: **development and physical-acceptance pass on 2026-07-18; release
+credentials pending.** The native app, embedded LaunchAgent, local IPP queue,
+logs, uninstall flow, and unsigned installer are implemented and tested. A
+real image printed from macOS Preview was physically confirmed perfect. See
+`PHASE5_RESULTS.md`.
 
 Create a small Mac setup application that:
 
