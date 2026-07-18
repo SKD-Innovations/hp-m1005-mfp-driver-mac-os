@@ -6,7 +6,9 @@
 - Phase 2: complete; isolated arm64 encoder and byte-for-byte regression suite.
 - Phase 3: complete; PWG Raster and Apple Raster printed correctly and
   identically through the IPP Printer Application on the physical M1005.
-- Phases 4–7: not started.
+- Phase 4: complete; cancellation-aware USB retries, endpoint-stall handling,
+  reconnect recovery, and printer power-cycle recovery validated.
+- Phases 5–7: not started.
 
 No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
 
@@ -153,6 +155,9 @@ The service should advertise only capabilities the M1005 really supports:
 - Manual duplex instructions rather than false automatic duplex support.
 
 ### Phase 4 — Reliable USB transport
+
+Status: **complete on 2026-07-18.** See `PHASE4_RESULTS.md` for the automated,
+live IPP, and physical recovery record.
 
 - Detect USB connect, disconnect and power cycles.
 - Handle endpoint stalls, partial writes and printer-busy states.

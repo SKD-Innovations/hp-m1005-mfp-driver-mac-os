@@ -19,7 +19,8 @@ PAPPL_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_LIBS) $(OPENSSL_LIBS) \
 	-framework AppKit -framework CoreFoundation -framework SystemConfiguration \
 	-framework IOKit -lpam -ldl -lpthread
 
-.PHONY: all clean phase2 phase2-test phase3 phase3-test probe claim test validate
+.PHONY: all clean phase2 phase2-test phase3 phase3-test phase4 phase4-test \
+	probe claim test validate
 
 all: phase2 phase3 $(BUILD)/m1005-usb $(BUILD)/generate-test-pbm \
 	$(BUILD)/generate-test-raster
@@ -27,6 +28,8 @@ all: phase2 phase3 $(BUILD)/m1005-usb $(BUILD)/generate-test-pbm \
 phase2: $(BUILD)/m1005-xqx-encode $(BUILD)/m1005-xqx-decode
 
 phase3: $(BUILD)/m1005-printer-app
+
+phase4: phase3 $(BUILD)/test-m1005-usb-io
 
 $(BUILD) $(ARTIFACTS):
 	mkdir -p $@
@@ -73,9 +76,15 @@ $(PAPPL_LIB): $(PAPPL_CONFIG)
 	$(MAKE) -C $(PAPPL_DIR)/pappl libpappl.a
 
 $(BUILD)/m1005-printer-app: src/m1005_printer_app.c src/m1005_pappl_usb.c \
-		src/m1005_pappl_usb.h $(PAPPL_LIB) $(BUILD)/m1005-xqx-encode | $(BUILD)
+		src/m1005_pappl_usb.h src/m1005_usb_io.c src/m1005_usb_io.h \
+		$(PAPPL_LIB) $(BUILD)/m1005-xqx-encode | $(BUILD)
 	$(CC) $(CFLAGS) $(PAPPL_CFLAGS) src/m1005_printer_app.c \
-		src/m1005_pappl_usb.c -o $@ $(PAPPL_LIBS)
+		src/m1005_pappl_usb.c src/m1005_usb_io.c -o $@ $(PAPPL_LIBS)
+
+$(BUILD)/test-m1005-usb-io: tests/test_m1005_usb_io.c src/m1005_usb_io.c \
+		src/m1005_usb_io.h | $(BUILD)
+	$(CC) $(CFLAGS) $(LIBUSB_CFLAGS) -Isrc tests/test_m1005_usb_io.c \
+		src/m1005_usb_io.c -o $@ $(LIBUSB_LIBS)
 
 $(ARTIFACTS)/m1005-a4-600.pbm: $(BUILD)/generate-test-pbm | $(ARTIFACTS)
 	$< $@
@@ -131,6 +140,10 @@ $(ARTIFACTS)/m1005-cancel-stress.xqx: $(ARTIFACTS)/m1005-cancel-stress.pbm $(BUI
 		-u88x84 -l88x84 -L3 -T3 -J "M1005 Cancel Test" -U "Codex" \
 		< $< > $@
 
+$(ARTIFACTS)/m1005-cancel-stress.pwg: $(ARTIFACTS)/m1005-cancel-stress.pbm \
+		$(BUILD)/generate-test-raster
+	$(BUILD)/generate-test-raster pwg $< $@ 8
+
 probe: $(BUILD)/m1005-usb
 	$< --probe
 
@@ -144,7 +157,10 @@ phase3-test: phase3 $(ARTIFACTS)/m1005-a4-600.pbm \
 		$(ARTIFACTS)/m1005-a4-600.pwg $(ARTIFACTS)/m1005-a4-600.urf
 	sh tests/test_phase3.sh
 
-test: phase2-test phase3-test validate-job-control
+phase4-test: phase4
+	$(BUILD)/test-m1005-usb-io
+
+test: phase2-test phase3-test phase4-test validate-job-control
 
 clean:
 	rm -rf $(BUILD) $(ARTIFACTS)

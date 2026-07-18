@@ -4,15 +4,17 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pappl/pappl.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
-#define APP_VERSION "0.3.0"
+#define APP_VERSION "0.4.0"
 #define DRIVER_NAME "hp-laserjet-m1005-600dpi"
 #define XQX_MIME_TYPE "application/vnd.hp-xqx"
 #define A4_WIDTH 4960U
@@ -77,8 +79,9 @@ static bool make_temp_file(char *path, size_t path_size, const char *suffix,
     return true;
 }
 
-static bool encode_xqx(const char *pbm_path, const char *xqx_path, int copies,
-                       const char *title, const char *username) {
+static bool encode_xqx(pappl_job_t *job, const char *pbm_path,
+                       const char *xqx_path, int copies, const char *title,
+                       const char *username) {
     char copies_value[32];
     snprintf(copies_value, sizeof(copies_value), "%d", copies);
 
@@ -115,9 +118,24 @@ static bool encode_xqx(const char *pbm_path, const char *xqx_path, int copies,
     }
 
     int status = 0;
-    do {
-        result = waitpid(process, &status, 0);
-    } while (result < 0 && errno == EINTR);
+    for (;;) {
+        result = waitpid(process, &status, WNOHANG);
+        if (result == process) {
+            break;
+        }
+        if (result < 0 && errno != EINTR) {
+            return false;
+        }
+        if (job != NULL && papplJobIsCanceled(job)) {
+            (void)kill(process, SIGTERM);
+            do {
+                result = waitpid(process, &status, 0);
+            } while (result < 0 && errno == EINTR);
+            return false;
+        }
+        struct timespec delay = {.tv_sec = 0, .tv_nsec = 10000000L};
+        (void)nanosleep(&delay, NULL);
+    }
 
     return result == process && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
@@ -133,6 +151,10 @@ static bool send_xqx(pappl_job_t *job, pappl_device_t *device,
 
     unsigned char buffer[65536];
     bool success = true;
+    bool wrote_data = false;
+    size_t total_written = 0;
+    papplLogJob(job, PAPPL_LOGLEVEL_INFO, "Starting M1005 USB transmission.");
+    m1005PapplUSBBeginJob(device, job);
     while (!papplJobIsCanceled(job)) {
         size_t bytes = fread(buffer, 1, sizeof(buffer), input);
         if (bytes == 0) {
@@ -143,19 +165,34 @@ static bool send_xqx(pappl_job_t *job, pappl_device_t *device,
             }
             break;
         }
-        if (papplDeviceWrite(device, buffer, bytes) != (ssize_t)bytes) {
-            papplLogJob(job, PAPPL_LOGLEVEL_ERROR,
-                        "Unable to send XQX data to the printer.");
-            success = false;
+        ssize_t written = m1005PapplUSBWrite(device, buffer, bytes);
+        if (written > 0) {
+            wrote_data = true;
+            total_written += (size_t)written;
+        }
+        if (written != (ssize_t)bytes) {
+            if (!papplJobIsCanceled(job)) {
+                papplLogJob(job, PAPPL_LOGLEVEL_ERROR,
+                            "Unable to send XQX data to the printer.");
+                success = false;
+            }
             break;
         }
     }
 
     fclose(input);
-    if (papplJobIsCanceled(job) || !success) {
+    if ((papplJobIsCanceled(job) && wrote_data) || !success) {
         m1005PapplUSBRequestReset(device);
-    } else {
-        papplDeviceFlush(device);
+    }
+    m1005PapplUSBEndJob(device);
+    if (papplJobIsCanceled(job)) {
+        papplLogJob(job, PAPPL_LOGLEVEL_INFO,
+                    "USB transmission canceled after %lu bytes; reset requested.",
+                    (unsigned long)total_written);
+    } else if (success) {
+        papplLogJob(job, PAPPL_LOGLEVEL_INFO,
+                    "Completed M1005 USB transmission of %lu bytes.",
+                    (unsigned long)total_written);
     }
     return success;
 }
@@ -274,12 +311,23 @@ static bool raster_end_job(pappl_job_t *job, pappl_pr_options_t *options,
     if (papplJobIsCanceled(job)) {
         success = true;
     } else if (success) {
-        success = encode_xqx(job_data->pbm_path, job_data->xqx_path,
+        papplLogJob(job, PAPPL_LOGLEVEL_INFO,
+                    "Starting isolated M1005 XQX encoder.");
+        success = encode_xqx(job, job_data->pbm_path, job_data->xqx_path,
                              options->copies, papplJobGetName(job),
                              papplJobGetUsername(job));
         if (!success) {
-            papplLogJob(job, PAPPL_LOGLEVEL_ERROR,
-                        "The M1005 XQX encoder failed.");
+            if (papplJobIsCanceled(job)) {
+                papplLogJob(job, PAPPL_LOGLEVEL_INFO,
+                            "XQX encoding stopped after cancellation.");
+                success = true;
+            } else {
+                papplLogJob(job, PAPPL_LOGLEVEL_ERROR,
+                            "The M1005 XQX encoder failed.");
+            }
+        } else {
+            papplLogJob(job, PAPPL_LOGLEVEL_INFO,
+                        "Completed isolated M1005 XQX encoding.");
         }
     }
     if (success && !papplJobIsCanceled(job)) {
@@ -397,7 +445,7 @@ static void set_encoder_path(const char *program) {
 }
 
 static int self_test(const char *input, const char *output) {
-    if (!encode_xqx(input, output, 1, "M1005 Phase 1", "Codex")) {
+    if (!encode_xqx(NULL, input, output, 1, "M1005 Phase 1", "Codex")) {
         fprintf(stderr, "Phase 3 encoder bridge self-test failed.\n");
         return 1;
     }

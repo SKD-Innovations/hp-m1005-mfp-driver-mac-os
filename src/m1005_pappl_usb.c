@@ -1,4 +1,5 @@
 #include "m1005_pappl_usb.h"
+#include "m1005_usb_io.h"
 
 #include <libusb.h>
 #include <stdint.h>
@@ -17,8 +18,28 @@ typedef struct {
     int interface_number;
     uint8_t bulk_in_endpoint;
     uint8_t bulk_out_endpoint;
+    pappl_job_t *active_job;
+    m1005_usb_io_t io;
     bool reset_requested;
 } m1005_usb_device_t;
+
+static int bulk_transfer(void *context, uint8_t endpoint,
+                         unsigned char *buffer, int length, int *transferred,
+                         unsigned timeout_ms) {
+    m1005_usb_device_t *usb = context;
+    return libusb_bulk_transfer(usb->handle, endpoint, buffer, length,
+                                transferred, timeout_ms);
+}
+
+static int clear_halt(void *context, uint8_t endpoint) {
+    m1005_usb_device_t *usb = context;
+    return libusb_clear_halt(usb->handle, endpoint);
+}
+
+static bool job_cancelled(void *context) {
+    m1005_usb_device_t *usb = context;
+    return usb->active_job != NULL && papplJobIsCanceled(usb->active_job);
+}
 
 static int find_interface(libusb_device *device, int *interface_number,
                           uint8_t *bulk_in_endpoint,
@@ -171,6 +192,13 @@ static bool device_open(pappl_device_t *device, const char *device_uri,
         return false;
     }
 
+    usb->io.context = usb;
+    usb->io.bulk_transfer = bulk_transfer;
+    usb->io.clear_halt = clear_halt;
+    usb->io.is_cancelled = job_cancelled;
+    usb->io.timeout_ms = 1000;
+    usb->io.max_retries = 5;
+    usb->io.retry_delay_ms = 100;
     papplDeviceSetData(device, usb);
     return true;
 }
@@ -199,25 +227,14 @@ static void device_close(pappl_device_t *device) {
 static ssize_t device_write(pappl_device_t *device, const void *buffer,
                             size_t bytes) {
     m1005_usb_device_t *usb = papplDeviceGetData(device);
-    const unsigned char *current = buffer;
-    size_t remaining = bytes;
-
-    while (remaining > 0) {
-        int requested = remaining > INT32_MAX ? INT32_MAX : (int)remaining;
-        int transferred = 0;
-        int result = libusb_bulk_transfer(usb->handle, usb->bulk_out_endpoint,
-                                          (unsigned char *)current, requested,
-                                          &transferred, TRANSFER_TIMEOUT_MS);
-        if (result != LIBUSB_SUCCESS || transferred <= 0) {
-            papplDeviceError(device, "M1005 USB write failed: %s",
-                             libusb_error_name(result));
-            return -1;
-        }
-        current += transferred;
-        remaining -= (size_t)transferred;
+    ssize_t result = m1005USBWriteAll(&usb->io, usb->bulk_out_endpoint, buffer,
+                                      bytes);
+    usb->reset_requested = usb->reset_requested || usb->io.reset_requested;
+    if (result != (ssize_t)bytes) {
+        papplDeviceError(device, "M1005 USB write failed: %s",
+                         libusb_error_name(usb->io.last_error));
     }
-
-    return (ssize_t)bytes;
+    return result;
 }
 
 static ssize_t device_read(pappl_device_t *device, void *buffer, size_t bytes) {
@@ -279,6 +296,25 @@ void m1005PapplUSBRegister(void) {
     papplDeviceAddScheme(M1005_USB_SCHEME, PAPPL_DEVTYPE_CUSTOM_LOCAL,
                          device_list, device_open, device_close, device_read,
                          device_write, device_status, device_id);
+}
+
+void m1005PapplUSBBeginJob(pappl_device_t *device, pappl_job_t *job) {
+    m1005_usb_device_t *usb = papplDeviceGetData(device);
+    if (usb != NULL) {
+        usb->active_job = job;
+    }
+}
+
+void m1005PapplUSBEndJob(pappl_device_t *device) {
+    m1005_usb_device_t *usb = papplDeviceGetData(device);
+    if (usb != NULL) {
+        usb->active_job = NULL;
+    }
+}
+
+ssize_t m1005PapplUSBWrite(pappl_device_t *device, const void *buffer,
+                           size_t bytes) {
+    return device_write(device, buffer, bytes);
 }
 
 void m1005PapplUSBRequestReset(pappl_device_t *device) {

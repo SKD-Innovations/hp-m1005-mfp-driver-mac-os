@@ -124,3 +124,27 @@ results.
 
 Phase 3 physical acceptance passed: one PWG Raster page and one Apple Raster
 page printed completely, correctly, and identically through the IPP queue.
+
+## Phase 4 reliable USB transport
+
+Phase 4 adds a cancellation-aware USB write state machine with 16 KiB transfer
+boundaries, partial-write handling, bounded retries, endpoint-halt recovery,
+and device-reset recovery after a cancelled or failed transmission. The
+isolated encoder is also stopped when an IPP job is cancelled.
+
+Build and run the complete regression suite with:
+
+```sh
+make phase4
+make test
+```
+
+Live IPP cancellation passed during both raster/encoding work and active raw
+XQX USB transmission. Physical cable removal, reconnection, printer power-off,
+and power-on recovery also passed: jobs remained queued while the device was
+absent and printed automatically when it returned. libusb proved reliable on
+the target Mac, so Phase 4 does not require a USBDriverKit extension.
+
+See `PHASE4_RESULTS.md` for the retry policy, automated fault coverage, live
+job sequence, physical-test record, and remaining Phase 7 fault-injection
+boundary.

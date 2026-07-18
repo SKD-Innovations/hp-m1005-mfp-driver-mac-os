@@ -23,10 +23,23 @@ static bool read_header(FILE *input) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 4 ||
+    if ((argc != 4 && argc != 5) ||
         (strcmp(argv[1], "pwg") != 0 && strcmp(argv[1], "urf") != 0)) {
-        fprintf(stderr, "usage: %s pwg|urf INPUT.pbm OUTPUT.raster\n", argv[0]);
+        fprintf(stderr,
+                "usage: %s pwg|urf INPUT.pbm OUTPUT.raster [PAGES]\n",
+                argv[0]);
         return 2;
+    }
+
+    unsigned pages = 1;
+    if (argc == 5) {
+        char *end = NULL;
+        unsigned long parsed = strtoul(argv[4], &end, 10);
+        if (end == argv[4] || *end != '\0' || parsed == 0 || parsed > 100) {
+            fprintf(stderr, "invalid page count: %s\n", argv[4]);
+            return 2;
+        }
+        pages = (unsigned)parsed;
     }
 
     FILE *input = fopen(argv[2], "rb");
@@ -35,6 +48,11 @@ int main(int argc, char *argv[]) {
         if (input != NULL) {
             fclose(input);
         }
+        return 1;
+    }
+    long raster_offset = ftell(input);
+    if (raster_offset < 0) {
+        fclose(input);
         return 1;
     }
 
@@ -52,26 +70,35 @@ int main(int argc, char *argv[]) {
     cupsRasterInitPWGHeader(&header, pwgMediaForPWG("iso_a4_210x297mm"),
                             urf ? "sgray_8" : "black_1", 600, 600,
                             "one-sided", NULL);
+    header.cupsInteger[CUPS_RASTER_PWG_TotalPageCount] = pages;
 
     bool success = raster != NULL && header.cupsWidth == WIDTH &&
-                   header.cupsHeight == OUTPUT_HEIGHT &&
-                   cupsRasterWriteHeader2(raster, &header) != 0;
+                   header.cupsHeight == OUTPUT_HEIGHT;
     unsigned char packed[PBM_BYTES_PER_LINE];
     unsigned char gray[WIDTH];
-    for (unsigned y = 0; success && y < OUTPUT_HEIGHT; ++y) {
-        if (fread(packed, 1, sizeof(packed), input) != sizeof(packed)) {
+    for (unsigned page = 0; success && page < pages; ++page) {
+        if (fseek(input, raster_offset, SEEK_SET) != 0 ||
+            cupsRasterWriteHeader2(raster, &header) == 0) {
             success = false;
             break;
         }
-        if (urf) {
-            for (unsigned x = 0; x < WIDTH; ++x) {
-                gray[x] = (packed[x / 8] & (0x80U >> (x & 7U))) ? 0 : 255;
+        for (unsigned y = 0; success && y < OUTPUT_HEIGHT; ++y) {
+            if (fread(packed, 1, sizeof(packed), input) != sizeof(packed)) {
+                success = false;
+                break;
             }
-            success = cupsRasterWritePixels(raster, gray, sizeof(gray)) ==
-                      sizeof(gray);
-        } else {
-            success = cupsRasterWritePixels(raster, packed, sizeof(packed)) ==
-                      sizeof(packed);
+            if (urf) {
+                for (unsigned x = 0; x < WIDTH; ++x) {
+                    gray[x] =
+                        (packed[x / 8] & (0x80U >> (x & 7U))) ? 0 : 255;
+                }
+                success = cupsRasterWritePixels(raster, gray, sizeof(gray)) ==
+                          sizeof(gray);
+            } else {
+                success =
+                    cupsRasterWritePixels(raster, packed, sizeof(packed)) ==
+                    sizeof(packed);
+            }
         }
     }
 
@@ -87,6 +114,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("created %s A4 600 dpi test raster: %s\n", argv[1], argv[3]);
+    printf("created %u-page %s A4 600 dpi test raster: %s\n", pages,
+           argv[1], argv[3]);
     return 0;
 }
