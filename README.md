@@ -121,3 +121,6 @@ the queue over DNS-SD as a driverless IPP printer.
 
 See `PHASE3_RESULTS.md` for the implementation boundary and live IPP test
 results.
+
+Phase 3 physical acceptance passed: one PWG Raster page and one Apple Raster
+page printed completely, correctly, and identically through the IPP queue.

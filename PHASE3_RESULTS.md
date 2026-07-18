@@ -6,10 +6,9 @@ Framework: PAPPL 1.4.11
 
 ## Result
 
-The Phase 3 Printer Application is implemented and passes its software, live
-USB discovery, IPP, DNS-SD, PWG Raster, and Apple Raster integration checks.
-Physical inspection of the two pages submitted through the new IPP queue is
-the remaining acceptance check.
+**PASS.** The Phase 3 Printer Application passes its software, live USB
+discovery, IPP, DNS-SD, PWG Raster, Apple Raster, and physical-print checks on
+the target HP LaserJet M1005 MFP.
 
 Release executable:
 
@@ -77,10 +76,15 @@ Live checks passed:
 - Get-Printer-Attributes with `ipptool`
 - one PWG Raster Print-Job (job 1, completed successfully)
 - one Apple Raster Print-Job (job 2, completed successfully)
+- physical inspection: both pages printed completely, correctly, and
+  identically
 
 The PAPPL log received PWG as 4960 x 7015 x 1 black and Apple Raster as
 4960 x 7015 x 8 sGray. Both jobs traversed the raster callbacks, XQX encoder,
 and custom USB transport; neither used the Phase 1 direct-send utility.
+
+The user inspected both sheets and confirmed the PWG Raster and Apple Raster
+results are correct and identical. Phase 3 is therefore complete.
 
 ## Current boundary
 
