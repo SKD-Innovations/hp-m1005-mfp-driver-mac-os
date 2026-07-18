@@ -8,9 +8,10 @@
   identically through the IPP Printer Application on the physical M1005.
 - Phase 4: complete; cancellation-aware USB retries, endpoint-stall handling,
   reconnect recovery, and printer power-cycle recovery validated.
-- Phase 5: development implementation and live integration complete; physical
-  acceptance passed with a real image printed perfectly from macOS Preview.
-  Developer ID signing/notarization remain pending. See `PHASE5_RESULTS.md`.
+- Phase 5: development implementation and live integration complete. Version
+  0.5.1 fixes a grayscale threshold defect and is installed at 600 dpi/High;
+  physical grayscale revalidation passed. Developer ID signing/notarization
+  remain pending. See `PHASE5_RESULTS.md`.
 - Phases 6–7: not started.
 
 No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
@@ -169,10 +170,11 @@ live IPP, and physical recovery record.
 
 ### Phase 5 — macOS integration and packaging
 
-Status: **development and physical-acceptance pass on 2026-07-18; release
-credentials pending.** The native app, embedded LaunchAgent, local IPP queue,
-logs, uninstall flow, and unsigned installer are implemented and tested. A
-real image printed from macOS Preview was physically confirmed perfect. See
+Status: **development and physical pass on 2026-07-18; release credentials
+pending.** The native app, embedded LaunchAgent, local IPP queue, logs,
+uninstall flow, and unsigned installer are implemented and tested. Version
+0.5.1 restores the full halftone matrices, defaults both printer layers to 600
+dpi/High, and printed the original grayscale photo correctly. See
 `PHASE5_RESULTS.md`.
 
 Create a small Mac setup application that:

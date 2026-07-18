@@ -3,8 +3,9 @@ import Foundation
 import ServiceManagement
 
 private enum Product {
-    static let servicePlist = "com.m1005printer.service.v5.plist"
+    static let servicePlist = "com.m1005printer.service.v6.plist"
     static let queueName = "HP_LaserJet_M1005"
+    static let printerName = "HP LaserJet M1005 MFP (USB)"
     static let printerURI =
         "ipp://localhost:8765/ipp/print/HP_LaserJet_M1005_MFP_(USB)"
     static let webURL = URL(string: "http://localhost:8765/")!
@@ -166,11 +167,22 @@ private final class IntegrationManager {
                 "The local printer service did not become ready on port 8765.")
         }
 
+        let serviceQuality = run(helperURL.path, [
+            "modify",
+            "-d", Product.printerName,
+            "-o", "print-quality-default=high"
+        ])
+        guard serviceQuality.status == 0 else {
+            throw IntegrationError(message:
+                "Unable to enable maximum printer quality: \(serviceQuality.output)")
+        }
+
         let result = run("/usr/sbin/lpadmin", [
             "-p", Product.queueName,
             "-E",
             "-v", Product.printerURI,
-            "-m", "everywhere"
+            "-m", "everywhere",
+            "-o", "cupsPrintQuality-default=High"
         ])
         guard result.status == 0 else {
             throw IntegrationError(message:

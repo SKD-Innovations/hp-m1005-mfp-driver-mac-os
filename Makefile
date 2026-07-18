@@ -109,7 +109,7 @@ $(BUILD)/m1005-setup: macos/M1005SetupApp.swift | $(BUILD)
 
 $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		$(BUILD)/m1005-xqx-encode macos/Info.plist \
-		macos/com.m1005printer.service.v5.plist macos/entitlements.plist \
+		macos/com.m1005printer.service.v6.plist macos/entitlements.plist \
 		macos/SOURCE.md Makefile $(wildcard vendor/foo2xqx/*) \
 		vendor/foo2xqx/COPYING vendor/foo2xqx/README.md \
 		external/pappl/LICENSE external/pappl/NOTICE
@@ -124,7 +124,7 @@ $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		"$(PHASE5_CONTENTS)/Resources/m1005-printer-service"
 	cp $(BUILD)/m1005-xqx-encode \
 		"$(PHASE5_CONTENTS)/Resources/m1005-xqx-encode"
-	cp macos/com.m1005printer.service.v5.plist \
+	cp macos/com.m1005printer.service.v6.plist \
 		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
 	cp vendor/foo2xqx/COPYING \
 		"$(PHASE5_CONTENTS)/Resources/Licenses/foo2xqx-GPL-2.0.txt"

@@ -5,7 +5,7 @@ app="build/M1005Printer.app"
 setup="$app/Contents/MacOS/M1005 Setup"
 service="$app/Contents/Resources/m1005-printer-service"
 encoder="$app/Contents/Resources/m1005-xqx-encode"
-agent="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v5.plist"
+agent="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v6.plist"
 test_directory=$(mktemp -d /private/tmp/m1005-phase5-test.XXXXXX)
 trap 'rm -rf "$test_directory"' EXIT HUP INT TERM
 
@@ -23,6 +23,8 @@ dither_result=$("$service" --dither-self-test)
 test "$(printf '%s\n' "$dither_result" | grep -c '^halftone=enabled$')" -eq 1
 test "$(printf '%s\n' "$dither_result" | grep -c '^photo-levels=256$')" -eq 1
 test "$(printf '%s\n' "$dither_result" | grep -c '^default-quality=high$')" -eq 1
+grep -q 'print-quality-default=high' macos/M1005SetupApp.swift
+grep -q 'cupsPrintQuality-default=High' macos/M1005SetupApp.swift
 
 if otool -L "$service" | grep -Eq '/opt/homebrew|/usr/local'; then
     echo "Phase 5 service contains a package-manager runtime dependency." >&2

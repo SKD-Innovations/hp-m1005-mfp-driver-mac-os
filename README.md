@@ -168,13 +168,15 @@ dependency. The app includes the corresponding GPL encoder source and license
 notices.
 
 The development integration passed live service, queue, PDF-to-Apple-Raster,
-encoder, USB, and uninstall/reinstall checks. Physical acceptance also passed:
-an image printed from macOS Preview was reproduced perfectly, with the service
-logging successful Apple Raster conversion, encoding, and a 20,007-byte USB
-transfer. Developer ID signing and Apple notarization remain pending because
-no Developer ID identities are installed on this Mac. `make phase5-release`
-performs the complete signed/notarized release workflow once those local
-credentials are available.
+encoder, USB, and uninstall/reinstall checks. A later grayscale document
+exposed a constant-threshold defect in version 0.5.0. Version 0.5.1 restores
+PAPPL's full document/photo halftone matrices and configures both the service
+and macOS queue for monochrome High quality at 600 dpi. Automated and live IPP
+validation pass, and the user confirmed that the original grayscale photo now
+prints correctly. Developer ID signing and Apple notarization remain pending
+because no Developer ID identities are installed on this Mac.
+`make phase5-release` performs the complete signed/notarized release workflow
+once those credentials are available.
 
 See `PHASE5_RESULTS.md` for installed paths, live results, build products,
 release requirements, and the exact signing/notarization boundary.

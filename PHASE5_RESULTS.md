@@ -6,12 +6,14 @@ Application version: `0.5.1`
 
 ## Result
 
-**DEVELOPMENT PASS; RELEASE SIGNING PENDING.** The native setup app,
-background service, driverless macOS queue, managed state/log paths, uninstall
-flow, self-contained app bundle, and unsigned installer have passed on the
-target Mac. Physical acceptance also passed: an image printed from macOS
-Preview was reproduced perfectly by the M1005. The installed development build
-is currently enabled and reports:
+**DEVELOPMENT AND PHYSICAL PASS; RELEASE SIGNING PENDING.** The
+native setup app, background service, driverless macOS queue, managed state/log
+paths, uninstall flow, self-contained app bundle, and unsigned installer have
+passed on the target Mac. A later document with a grayscale portrait exposed a
+constant-threshold defect that was not visible in the initial Preview test.
+Version 0.5.1 corrects that defect and is installed. The same tonal document
+was reprinted and the user confirmed that its photo now reproduces correctly.
+The installed development build reports:
 
 ```text
 usb=connected
@@ -87,7 +89,8 @@ The live integration passed:
 - bundled encoder completed
 - 20,007-byte XQX stream transmitted over USB
 - PAPPL job completed with one impression
-- user physically confirmed that the image printed perfectly
+- initial sheet confirmed correct geometry, text, and USB delivery, but did
+  not adequately expose grayscale tonal reproduction
 - full uninstall removed only M1005 integration/data
 - re-enable restored the service and queue
 - exactly one final process listens on IPv4 and IPv6 port 8765
@@ -97,8 +100,27 @@ PWG fixture is not a normal image input to the macOS CUPS client filter, and
 job 7 exposed launchd's bundle-relative executable path. Both issues were
 fixed. Job 8's specially generated 1-bit PBM-to-PDF input produced an
 822-byte, border-heavy diagnostic page; that result was an artifact of the
-synthetic source conversion, not the normal driver path. The subsequent real
-Preview image (job 9) is the Phase 5 physical acceptance test and passed.
+synthetic source conversion, not the normal driver path. A subsequent Preview
+image proved the normal queue and USB path, but a more demanding document later
+showed that intermediate tones were being reduced to binary black/white.
+
+## Grayscale quality correction
+
+The cause was two `memset(..., 127, ...)` calls that replaced PAPPL's document
+and photo halftone matrices with one constant threshold. Version 0.5.1 removes
+those overrides and uses PAPPL's complete 16×16 matrices. It also sets and
+migrates both the PAPPL printer and macOS CUPS queue to:
+
+- monochrome output (not the optional explicit bi-level mode)
+- High print quality
+- the M1005's maximum supported 600×600 dpi resolution
+- the 256-threshold blue-noise photo matrix
+
+The setup app reapplies these defaults when adding or updating the queue, so an
+older saved `Normal` setting cannot silently survive an upgrade. Automated and
+live IPP checks pass. The user reprinted the original grayscale document and
+confirmed that the photo now prints correctly; grayscale physical acceptance
+therefore passed.
 
 ## Automated verification
 
@@ -113,6 +135,8 @@ Preview image (job 9) is the Phase 5 physical acceptance test and passed.
 - GPL corresponding encoder source in the app
 - bundle-relative encoder discovery
 - byte-for-byte known-good XQX generation
+- preservation of non-constant document and photo halftone matrices
+- all 256 photo thresholds and High-quality default
 
 Build products:
 
