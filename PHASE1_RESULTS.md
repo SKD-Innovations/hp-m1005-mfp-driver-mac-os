@@ -37,8 +37,7 @@ deterministic macOS raster -> foo2xqx/JBIG -> XQX -> libusb -> M1005
 
 ## Remaining Phase 1 checks
 
-- Cancellation
-- Power cycle and USB reconnect
+None. Phase 1 is complete.
 
 ## Multi-page print test: PASS
 
@@ -67,3 +66,49 @@ deterministic macOS raster -> foo2xqx/JBIG -> XQX -> libusb -> M1005
 - Implementation consequence: advertise 600 x 600 dpi only in the initial
   Printer Application. If 300-dpi source content must be accepted, upscale it
   to a 600-dpi raster before encoding.
+
+## Mid-job cancellation test: PASS
+
+- Test input: valid 4,178,937-byte A4/600-dpi XQX stress stream
+- Transmission deliberately stopped after 65,536 bytes
+- The M1005 does not acknowledge the USB printer-class soft-reset request, so
+  that request must not be used for cancellation
+- libusb device reset succeeded and caused clean USB re-enumeration
+- Interface 1 was immediately reclaimable afterward
+- Post-cancellation status: `0x18` (selected, paper present, no error)
+- Physical result: no partial or blank sheet was produced
+- Implementation consequence: cancel active USB output, reset/re-enumerate the
+  device, rediscover endpoints, and reopen the printer interface
+
+## Cold power cycle and USB reconnect test: PASS
+
+- Printer powered off and USB cable disconnected from the Mac
+- USB reconnected and printer cold-started
+- Device rediscovered automatically as `03f0:3b17`
+- Interface and endpoint layout remained unchanged
+- Interface 1 was reclaimable and reported healthy status `0x18`
+- No firmware upload or vendor-specific initialization was required
+- Final 2717-byte A4/600-dpi baseline job was accepted on endpoint `0x02`
+- Physical result: final `PHASE 1 TEST` sheet printed correctly
+
+## Phase 1 conclusion
+
+**PASS.** A native arm64 macOS 26.5 command-line program can discover the
+HP LaserJet M1005 MFP, claim only its printer interface, send validated XQX,
+cancel an incomplete job through device reset/re-enumeration, recover after a
+cold power cycle, and print correct A4 output. Linux and DriverKit are not
+required for the validated print transport.
+
+Validated initial capability set:
+
+- Monochrome
+- A4
+- 600 x 600 dpi
+- Simplex
+- Multi-page documents
+- Printer-side copies
+- Mid-job cancellation without partial output
+- USB reset/re-enumeration and cold power-cycle recovery
+
+The Phase 1 deliverable is `build/m1005-usb`, backed by the reproducible build
+and test-page targets in the project `Makefile`.
