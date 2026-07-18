@@ -7,12 +7,26 @@ ARTIFACTS := artifacts
 
 LIBUSB_CFLAGS := $(shell pkg-config --cflags libusb-1.0)
 LIBUSB_LIBS := $(shell pkg-config --libs libusb-1.0)
+OPENSSL_CFLAGS := $(shell pkg-config --cflags openssl)
+OPENSSL_LIBS := $(shell pkg-config --libs openssl)
+CUPS_CFLAGS := $(shell cups-config --cflags)
+CUPS_LIBS := $(shell cups-config --libs)
+PAPPL_DIR := external/pappl
+PAPPL_LIB := $(PAPPL_DIR)/pappl/libpappl.a
+PAPPL_CONFIG := $(PAPPL_DIR)/config.status
+PAPPL_CFLAGS := -I$(PAPPL_DIR) $(CUPS_CFLAGS) $(LIBUSB_CFLAGS) $(OPENSSL_CFLAGS)
+PAPPL_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_LIBS) $(OPENSSL_LIBS) \
+	-framework AppKit -framework CoreFoundation -framework SystemConfiguration \
+	-framework IOKit -lpam -ldl -lpthread
 
-.PHONY: all clean phase2 phase2-test probe claim test validate
+.PHONY: all clean phase2 phase2-test phase3 phase3-test probe claim test validate
 
-all: phase2 $(BUILD)/m1005-usb $(BUILD)/generate-test-pbm
+all: phase2 phase3 $(BUILD)/m1005-usb $(BUILD)/generate-test-pbm \
+	$(BUILD)/generate-test-raster
 
 phase2: $(BUILD)/m1005-xqx-encode $(BUILD)/m1005-xqx-decode
+
+phase3: $(BUILD)/m1005-printer-app
 
 $(BUILD) $(ARTIFACTS):
 	mkdir -p $@
@@ -41,8 +55,27 @@ $(BUILD)/m1005-xqx-decode: $(BUILD)/m1005-xqx-decode.o $(BUILD)/libjbig-m1005.a
 $(BUILD)/generate-test-pbm: src/generate_test_pbm.c | $(BUILD)
 	$(CC) $(CFLAGS) $< -o $@
 
+$(BUILD)/generate-test-raster: src/generate_test_raster.c | $(BUILD)
+	$(CC) $(CFLAGS) $(CUPS_CFLAGS) $< -o $@ $(CUPS_LIBS)
+
 $(BUILD)/m1005-usb: src/m1005_usb.c | $(BUILD)
 	$(CC) $(CFLAGS) $(LIBUSB_CFLAGS) $< -o $@ $(LIBUSB_LIBS)
+
+$(PAPPL_CONFIG):
+	@test -x $(PAPPL_DIR)/configure || \
+		(echo "Missing PAPPL source; see README.md Phase 3 bootstrap instructions." && false)
+	cd $(PAPPL_DIR) && CFLAGS='-mmacosx-version-min=26.0 -arch arm64' \
+		./configure --prefix=/private/tmp/m1005-pappl --enable-libusb \
+		--disable-libjpeg --disable-libpng --enable-static --disable-shared \
+		--with-tls=openssl
+
+$(PAPPL_LIB): $(PAPPL_CONFIG)
+	$(MAKE) -C $(PAPPL_DIR)/pappl libpappl.a
+
+$(BUILD)/m1005-printer-app: src/m1005_printer_app.c src/m1005_pappl_usb.c \
+		src/m1005_pappl_usb.h $(PAPPL_LIB) $(BUILD)/m1005-xqx-encode | $(BUILD)
+	$(CC) $(CFLAGS) $(PAPPL_CFLAGS) src/m1005_printer_app.c \
+		src/m1005_pappl_usb.c -o $@ $(PAPPL_LIBS)
 
 $(ARTIFACTS)/m1005-a4-600.pbm: $(BUILD)/generate-test-pbm | $(ARTIFACTS)
 	$< $@
@@ -51,6 +84,14 @@ $(ARTIFACTS)/m1005-a4-600.xqx: $(ARTIFACTS)/m1005-a4-600.pbm $(BUILD)/m1005-xqx-
 	$(BUILD)/m1005-xqx-encode -r600x600 -g4960x7016 -p9 -m1 -n1 -d1 -s7 \
 		-u88x84 -l88x84 -L3 -T3 -J "M1005 Phase 1" -U "Codex" \
 		< $< > $@
+
+$(ARTIFACTS)/m1005-a4-600.pwg: $(ARTIFACTS)/m1005-a4-600.pbm \
+		$(BUILD)/generate-test-raster
+	$(BUILD)/generate-test-raster pwg $< $@
+
+$(ARTIFACTS)/m1005-a4-600.urf: $(ARTIFACTS)/m1005-a4-600.pbm \
+		$(BUILD)/generate-test-raster
+	$(BUILD)/generate-test-raster urf $< $@
 
 $(ARTIFACTS)/m1005-a4-600.decode.txt: $(ARTIFACTS)/m1005-a4-600.xqx $(BUILD)/m1005-xqx-decode
 	$(BUILD)/m1005-xqx-decode $< > $@
@@ -99,7 +140,11 @@ claim: $(BUILD)/m1005-usb
 phase2-test: all
 	sh tests/test_phase2.sh
 
-test: phase2-test validate-job-control
+phase3-test: phase3 $(ARTIFACTS)/m1005-a4-600.pbm \
+		$(ARTIFACTS)/m1005-a4-600.pwg $(ARTIFACTS)/m1005-a4-600.urf
+	sh tests/test_phase3.sh
+
+test: phase2-test phase3-test validate-job-control
 
 clean:
 	rm -rf $(BUILD) $(ARTIFACTS)

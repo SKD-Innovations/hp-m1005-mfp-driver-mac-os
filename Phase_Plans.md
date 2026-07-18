@@ -1,4 +1,14 @@
- found no ready-to-install, signed, notarized driver on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
+# HP LaserJet M1005 MFP driver plan
+
+## Current progress (2026-07-18)
+
+- Phase 1: complete; direct USB/XQX printing and recovery validated physically.
+- Phase 2: complete; isolated arm64 encoder and byte-for-byte regression suite.
+- Phase 3: implementation and automated/live integration checks complete;
+  physical inspection of the PWG and Apple Raster pages is pending.
+- Phases 4–7: not started.
+
+No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
 
 ## 1. Compatible driver for macOS 26.5
 

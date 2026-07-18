@@ -82,3 +82,42 @@ that printed correctly during Phase 1.
 
 See `PHASE2_RESULTS.md` for provenance, test coverage, sanitizer results, and
 the Phase 3 handoff constraint.
+
+## Phase 3 Printer Application
+
+Phase 3 adds a native arm64 PAPPL Printer Application with:
+
+- an embedded IPP Everywhere service and web interface
+- PWG Raster (`image/pwg-raster`) and Apple Raster (`image/urf`) input
+- an isolated per-job call to the Phase 2 XQX encoder
+- an exact-match libusb transport for `03f0:3b17`
+- device-reset recovery when an active USB transmission is cancelled
+
+The application intentionally advertises only the capabilities validated on
+the physical printer: A4, 600 dpi, monochrome, and one-sided printing.
+
+PAPPL is an ignored external build dependency. Bootstrap the pinned version
+once, then build and test Phase 3:
+
+```sh
+mkdir -p external
+git clone --branch v1.4.11 --depth 1 \
+  https://github.com/michaelrsweet/pappl.git external/pappl
+make phase3
+make phase3-test
+```
+
+Run the development server with:
+
+```sh
+build/m1005-printer-app server \
+  -o server-port=8000 \
+  -o log-level=info
+```
+
+The connected M1005 is automatically added using the `m1005usb://` device
+scheme. Open `http://localhost:8000/` to inspect the queue. macOS can discover
+the queue over DNS-SD as a driverless IPP printer.
+
+See `PHASE3_RESULTS.md` for the implementation boundary and live IPP test
+results.

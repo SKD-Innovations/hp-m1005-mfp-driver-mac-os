@@ -1,6 +1,6 @@
 /artifacts/*.decode.txt
 /artifacts/*.pbm
-/artifacts/*.png
-/artifacts/*.xqx
+/artifacts/
 /build/
+/external/
 /upstream/
