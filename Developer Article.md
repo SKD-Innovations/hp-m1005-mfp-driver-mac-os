@@ -114,7 +114,7 @@ flowchart TD
     P2 -. passed .-> R2[Byte-identical regression fixture]
     P3 -. passed .-> R3[PWG + Apple Raster physical prints]
     P4 -. passed .-> R4[Cancel, reconnect, power-cycle recovery]
-    P5 -. passed .-> R5[Native app + v0.5.2 package]
+    P5 -. passed .-> R5[Native app + v0.5.3 package]
 ```
 
 ### Phase 1: prove the hardware and protocol path
@@ -252,7 +252,7 @@ Physical output was always the final authority. A job being marked â€œcompletedâ
 
 The latest development package is:
 
-`HP-LaserJet-M1005-0.5.2-unsigned.pkg`
+`HP-LaserJet-M1005-0.5.3-unsigned.pkg`
 
 It contains:
 
@@ -281,7 +281,7 @@ Physical testing covered:
 
 The package has been successfully built and tested on the target Mac. Before it is presented as a normal public release, it must be signed with Developer ID Application and Developer ID Installer certificates, notarized by Apple, and stapled. The repository already includes an automated `make phase5-release` workflow for that final distribution step.
 
-> **Download:** [HP LaserJet M1005 MFP Driver for macOS v0.5.2](ADD_SIGNED_PKG_DOWNLOAD_LINK_HERE)
+> **Download:** [HP LaserJet M1005 MFP Driver for macOS v0.5.3](ADD_SIGNED_PKG_DOWNLOAD_LINK_HERE)
 
 > **Source code:** [Project repository](ADD_SOURCE_REPOSITORY_LINK_HERE)
 

@@ -12,7 +12,7 @@ project_directory=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 release_directory="$project_directory/build/release"
 source_app="$project_directory/build/M1005Printer.app"
 release_app="$release_directory/M1005Printer.app"
-release_package="$release_directory/HP-LaserJet-M1005-0.5.2.pkg"
+release_package="$release_directory/HP-LaserJet-M1005-0.5.3.pkg"
 entitlements="$project_directory/macos/entitlements.plist"
 
 cd "$project_directory"
@@ -36,7 +36,7 @@ codesign --verify --deep --strict --verbose=2 "$release_app"
 
 COPYFILE_DISABLE=1 pkgbuild --component "$release_app" \
     --install-location /Applications \
-    --identifier com.m1005printer.pkg --version 0.5.2 \
+    --identifier com.m1005printer.pkg --version 0.5.3 \
     --sign "$DEVELOPER_ID_INSTALLER" "$release_package"
 
 xcrun notarytool submit "$release_package" \

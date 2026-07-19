@@ -16,6 +16,7 @@ CUPS_LIBS := $(shell cups-config --libs)
 PAPPL_DIR := external/pappl
 PAPPL_LIB := $(PAPPL_DIR)/pappl/libpappl.a
 PAPPL_CONFIG := $(PAPPL_DIR)/config.status
+PAPPL_SOURCES := $(wildcard $(PAPPL_DIR)/pappl/*.[chm])
 PAPPL_CFLAGS := -I$(PAPPL_DIR) $(CUPS_CFLAGS) $(LIBUSB_CFLAGS) $(OPENSSL_CFLAGS)
 PAPPL_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_LIBS) $(OPENSSL_LIBS) \
 	-framework AppKit -framework CoreFoundation -framework SystemConfiguration \
@@ -26,7 +27,7 @@ PAPPL_STATIC_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_STATIC) \
 	-framework IOKit -framework Security -lpam -ldl -lpthread
 PHASE5_APP := $(BUILD)/M1005Printer.app
 PHASE5_CONTENTS := $(PHASE5_APP)/Contents
-PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-0.5.2-unsigned.pkg
+PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-0.5.3-unsigned.pkg
 
 .PHONY: all clean phase2 phase2-test phase3 phase3-test phase4 phase4-test \
 	phase5 phase5-test phase5-package phase5-release probe claim test validate
@@ -83,7 +84,7 @@ $(PAPPL_CONFIG):
 		--disable-libjpeg --disable-libpng --enable-static --disable-shared \
 		--with-tls=openssl
 
-$(PAPPL_LIB): $(PAPPL_CONFIG)
+$(PAPPL_LIB): $(PAPPL_CONFIG) $(PAPPL_SOURCES)
 	$(MAKE) -C $(PAPPL_DIR)/pappl libpappl.a
 
 $(BUILD)/m1005-printer-app: src/m1005_printer_app.c src/m1005_pappl_usb.c \
@@ -110,7 +111,8 @@ $(BUILD)/m1005-setup: macos/M1005SetupApp.swift | $(BUILD)
 $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		$(BUILD)/m1005-xqx-encode macos/Info.plist \
 		macos/com.m1005printer.service.v7.plist macos/entitlements.plist \
-		macos/SOURCE.md Makefile $(wildcard vendor/foo2xqx/*) \
+		macos/uninstall_m1005.sh macos/SOURCE.md Makefile \
+		$(wildcard vendor/foo2xqx/*) \
 		vendor/foo2xqx/COPYING vendor/foo2xqx/README.md \
 		external/pappl/LICENSE external/pappl/NOTICE
 	rm -rf "$@"
@@ -124,6 +126,9 @@ $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		"$(PHASE5_CONTENTS)/Resources/m1005-printer-service"
 	cp $(BUILD)/m1005-xqx-encode \
 		"$(PHASE5_CONTENTS)/Resources/m1005-xqx-encode"
+	cp macos/uninstall_m1005.sh \
+		"$(PHASE5_CONTENTS)/Resources/uninstall-m1005"
+	chmod 755 "$(PHASE5_CONTENTS)/Resources/uninstall-m1005"
 	cp macos/com.m1005printer.service.v7.plist \
 		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
 	cp vendor/foo2xqx/COPYING \
@@ -149,7 +154,7 @@ $(PHASE5_PACKAGE): $(PHASE5_APP)
 	rm -f "$@"
 	COPYFILE_DISABLE=1 pkgbuild --component "$(PHASE5_APP)" \
 		--install-location /Applications \
-		--identifier com.m1005printer.pkg --version 0.5.2 "$@"
+		--identifier com.m1005printer.pkg --version 0.5.3 "$@"
 
 phase5-package: $(PHASE5_PACKAGE)
 

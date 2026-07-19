@@ -175,7 +175,11 @@ bi-level output, and configures both the service and macOS queue for tonal
 monochrome High quality at 600 dpi. Automated and live IPP validation pass, and
 the user confirmed that the original grayscale photo prints correctly from
 Preview and from Adobe Acrobat Reader both with and without its grayscale
-checkbox. Developer ID signing and Apple notarization remain pending because
+checkbox. Version 0.5.3 makes menu-bar Stop persistent until the user starts
+the service again from the setup app, retains automatic crash recovery, uses
+Apple's printer SF Symbol in the menu bar, and adds complete one-click removal
+of the app, queue, services, data, logs, and package receipt. Developer ID
+signing and Apple notarization remain pending because
 no Developer ID identities are installed on this Mac.
 `make phase5-release` performs the complete signed/notarized release workflow
 once those credentials are available.

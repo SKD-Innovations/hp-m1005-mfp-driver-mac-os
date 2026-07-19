@@ -2,7 +2,7 @@
 
 Date: 2026-07-18  
 Target: macOS 26.5.2, Apple Silicon (`arm64`)  
-Application version: `0.5.2`
+Application version: `0.5.3`
 
 ## Result
 
@@ -15,7 +15,11 @@ Version 0.5.1 corrected the halftone defect. Version 0.5.2 also removes the
 application-visible binary mode so Adobe Acrobat Reader's grayscale checkbox
 cannot select or infer bi-level output. The same tonal document was reprinted
 from Acrobat both with and without that checkbox, and the user confirmed that
-its photo reproduces correctly in both cases. The installed development build
+its photo reproduces correctly in both cases. Version 0.5.3 corrects the
+LaunchAgent lifecycle so a user-requested Stop persists until Start is chosen,
+while unsuccessful exits still recover automatically. It also supplies an
+Apple printer SF Symbol for the menu bar and a complete one-click uninstaller.
+The installed development build
 reports:
 
 ```text
@@ -54,11 +58,12 @@ The AppKit setup/status window provides:
 - local IPP server reachability
 - macOS queue state, including detection of an obsolete/wrong queue URI
 - enable service and add/update printer
-- disable service and remove printer
+- start or persistently stop the service, disable it at login, and remove the printer
 - link to the local PAPPL printer page
 - link to Login Items settings
 - recent service logs
-- confirmed uninstall flow for the queue, service, spool/state, and logs
+- complete uninstall flow for installed app copies, queue, current and legacy
+  services, spool/state, logs, preferences, and package receipt
 
 The same functions are available for testing through `M1005 Setup` command
 options such as `--status`, `--enable`, `--disable`, and `--uninstall`.
@@ -158,7 +163,7 @@ both with the checkbox clear and with it selected.
 Build products:
 
 - `build/M1005Printer.app`
-- `build/HP-LaserJet-M1005-0.5.2-unsigned.pkg`
+- `build/HP-LaserJet-M1005-0.5.3-unsigned.pkg`
 
 The unsigned package is for local development only and must not be distributed
 as the release installer.

@@ -4,6 +4,15 @@ import ServiceManagement
 
 private enum Product {
     static let servicePlist = "com.m1005printer.service.v7.plist"
+    static let serviceLabel = "com.m1005printer.service.v7"
+    static let legacyServiceLabels = [
+        "com.m1005printer.service",
+        "com.m1005printer.service.v2",
+        "com.m1005printer.service.v3",
+        "com.m1005printer.service.v4",
+        "com.m1005printer.service.v5",
+        "com.m1005printer.service.v6"
+    ]
     static let queueName = "HP_LaserJet_M1005"
     static let printerName = "HP LaserJet M1005 MFP (USB)"
     static let printerURI =
@@ -50,6 +59,17 @@ private final class IntegrationManager {
             .appendingPathComponent("M1005Printer", isDirectory: true)
     }
 
+    private var stopMarkerURL: URL {
+        appSupportURL.appendingPathComponent("service-stopped")
+    }
+
+    private var uninstallerURL: URL {
+        Bundle.main.bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Resources", isDirectory: true)
+            .appendingPathComponent("uninstall-m1005")
+    }
+
     var logDirectoryURL: URL {
         FileManager.default.urls(for: .libraryDirectory,
                                  in: .userDomainMask)[0]
@@ -61,7 +81,8 @@ private final class IntegrationManager {
         logDirectoryURL.appendingPathComponent("service.log")
     }
 
-    private func run(_ executable: String, _ arguments: [String]) -> CommandResult {
+    private func run(_ executable: String, _ arguments: [String],
+                     environment additions: [String: String] = [:]) -> CommandResult {
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -71,6 +92,9 @@ private final class IntegrationManager {
         var environment = ProcessInfo.processInfo.environment
         environment["LANG"] = "C"
         environment["LC_ALL"] = "C"
+        for (key, value) in additions {
+            environment[key] = value
+        }
         process.environment = environment
 
         do {
@@ -91,7 +115,8 @@ private final class IntegrationManager {
         case .notRegistered:
             return "disabled"
         case .enabled:
-            return "enabled"
+            return FileManager.default.fileExists(atPath: stopMarkerURL.path)
+                ? "stopped by user" : "enabled"
         case .requiresApproval:
             return "approval required"
         case .notFound:
@@ -131,6 +156,34 @@ private final class IntegrationManager {
         run("/usr/bin/lpstat", ["-p", Product.queueName]).status == 0
     }
 
+    private func setStoppedByUser(_ stopped: Bool) throws {
+        try FileManager.default.createDirectory(at: appSupportURL,
+                                                withIntermediateDirectories: true)
+        if stopped {
+            try Data("Stopped by the user. Start with the M1005 app.\n".utf8)
+                .write(to: stopMarkerURL, options: .atomic)
+        } else if FileManager.default.fileExists(atPath: stopMarkerURL.path) {
+            try FileManager.default.removeItem(at: stopMarkerURL)
+        }
+    }
+
+    private func cleanupLegacyServices() {
+        let domain = "gui/\(getuid())"
+        for label in Product.legacyServiceLabels {
+            _ = run("/bin/launchctl", ["bootout", "\(domain)/\(label)"])
+        }
+    }
+
+    private func waitForServer(running: Bool, attempts: Int = 30) -> Bool {
+        for _ in 0..<attempts {
+            if serverIsReady() == running {
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        return serverIsReady() == running
+    }
+
     func status() -> IntegrationStatus {
         IntegrationStatus(
             usb: usbStatusText(),
@@ -139,7 +192,7 @@ private final class IntegrationManager {
             queue: queueStatusText())
     }
 
-    func enableService() throws {
+    private func registerService() throws {
         try FileManager.default.createDirectory(at: appSupportURL,
                                                 withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: logDirectoryURL,
@@ -151,6 +204,44 @@ private final class IntegrationManager {
             throw IntegrationError(message:
                 "Background service approval is required in System Settings → General → Login Items.")
         }
+    }
+
+    func startService() throws -> String {
+        try setStoppedByUser(false)
+        cleanupLegacyServices()
+        try registerService()
+
+        let target = "gui/\(getuid())/\(Product.serviceLabel)"
+        let kickstart = run("/bin/launchctl", ["kickstart", target])
+        guard waitForServer(running: true) else {
+            throw IntegrationError(message:
+                "The printer service did not start on port 8765. \(kickstart.output)")
+        }
+        return "Background printer service started."
+    }
+
+    func enableService() throws {
+        _ = try startService()
+    }
+
+    func stopService() throws -> String {
+        try setStoppedByUser(true)
+        guard serverIsReady() else {
+            return "Background printer service is stopped. It will remain stopped until you start it from this app."
+        }
+
+        let shutdown = run(helperURL.path, ["shutdown"], environment: [
+            "XDG_CONFIG_HOME": appSupportURL.path
+        ])
+        if shutdown.status != 0 && serverIsReady() {
+            let target = "gui/\(getuid())/\(Product.serviceLabel)"
+            _ = run("/bin/launchctl", ["kill", "SIGTERM", target])
+        }
+        guard waitForServer(running: false) else {
+            throw IntegrationError(message:
+                "The service did not stop cleanly: \(shutdown.output)")
+        }
+        return "Background printer service stopped. It will remain stopped until you start it from this app."
     }
 
     func addQueue() throws {
@@ -191,16 +282,18 @@ private final class IntegrationManager {
     }
 
     func enableAndAddQueue() throws -> String {
-        try enableService()
+        _ = try startService()
         try addQueue()
         return "Background service enabled and HP_LaserJet_M1005 added to macOS."
     }
 
     func disableService() throws -> String {
+        try setStoppedByUser(true)
         if service.status == .enabled || service.status == .requiresApproval {
             try service.unregister()
         }
-        return "Background printer service disabled."
+        _ = waitForServer(running: false)
+        return "Background printer service disabled at login."
     }
 
     func removeQueue() throws -> String {
@@ -214,10 +307,7 @@ private final class IntegrationManager {
         return "HP_LaserJet_M1005 removed from macOS."
     }
 
-    func uninstallIntegration() throws -> String {
-        _ = try removeQueue()
-        _ = try disableService()
-
+    private func removeManagedData() throws {
         let manager = FileManager.default
         if manager.fileExists(atPath: appSupportURL.path) {
             try manager.removeItem(at: appSupportURL)
@@ -236,7 +326,41 @@ private final class IntegrationManager {
                 try manager.removeItem(at: item)
             }
         }
-        return "Printer queue, background service, spool data, and logs removed. You may now move the app to Trash."
+    }
+
+    private func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private func appleScriptLiteral(_ value: String) -> String {
+        "\"" + value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    func uninstallCompletely() throws -> String {
+        _ = try removeQueue()
+        _ = try disableService()
+        cleanupLegacyServices()
+        try removeManagedData()
+
+        guard FileManager.default.isExecutableFile(atPath: uninstallerURL.path) else {
+            throw IntegrationError(message: "The bundled complete uninstaller is missing.")
+        }
+        let command = [
+            shellQuote(uninstallerURL.path),
+            String(getuid()),
+            shellQuote(FileManager.default.homeDirectoryForCurrentUser.path),
+            shellQuote(Bundle.main.bundleURL.path)
+        ].joined(separator: " ")
+        let source = "do shell script \(appleScriptLiteral(command)) with administrator privileges"
+        let result = run("/usr/bin/osascript", ["-e", source])
+        guard result.status == 0 else {
+            throw IntegrationError(message:
+                result.output.isEmpty ? "Complete uninstall was cancelled." : result.output)
+        }
+        return result.output.isEmpty
+            ? "M1005 was completely uninstalled." : result.output
     }
 
     func recentLog() -> String {
@@ -251,7 +375,7 @@ private final class IntegrationManager {
         let plist = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Library/LaunchAgents")
             .appendingPathComponent(Product.servicePlist)
-        let required = [helperURL, plist,
+        let required = [helperURL, plist, uninstallerURL,
                         Bundle.main.bundleURL.appendingPathComponent(
                             "Contents/Resources/m1005-xqx-encode")]
         for item in required where !FileManager.default.fileExists(atPath: item.path) {
@@ -311,7 +435,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: "HP LaserJet M1005")
         title.font = .systemFont(ofSize: 25, weight: .bold)
         let subtitle = NSTextField(wrappingLabelWithString:
-            "Modern local Printer Application for macOS 26. Connect the printer by USB, enable the background service, then add the driverless queue.")
+            "Modern local Printer Application for macOS 26. Connect the printer by USB, start the background service, then add the driverless queue.")
         subtitle.textColor = .secondaryLabelColor
 
         let statusGrid = NSGridView(views: [
@@ -326,7 +450,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         statusGrid.columnSpacing = 18
 
         let primaryButtons = NSStackView(views: [
-            button("Enable Service & Add Printer", action: #selector(enableAndAdd(_:))),
+            button("Start Service & Add Printer", action: #selector(enableAndAdd(_:))),
             button("Refresh", action: #selector(refresh(_:))),
             button("Open Printer Page", action: #selector(openPrinterPage(_:)))
         ])
@@ -334,13 +458,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         primaryButtons.spacing = 10
 
         let maintenanceButtons = NSStackView(views: [
-            button("Disable Service", action: #selector(disableService(_:))),
+            button("Start Service", action: #selector(startService(_:))),
+            button("Stop Service", action: #selector(stopService(_:))),
+            button("Disable at Login", action: #selector(disableService(_:))),
             button("Remove Printer", action: #selector(removeQueue(_:))),
-            button("Login Items Settings", action: #selector(openLoginItems(_:))),
-            button("Uninstall Integration…", action: #selector(uninstall(_:)))
         ])
         maintenanceButtons.orientation = .horizontal
         maintenanceButtons.spacing = 8
+
+        let removalButtons = NSStackView(views: [
+            button("Login Items Settings", action: #selector(openLoginItems(_:))),
+            button("Uninstall M1005 Completely…", action: #selector(uninstall(_:)))
+        ])
+        removalButtons.orientation = .horizontal
+        removalButtons.spacing = 8
 
         let logLabel = label("Recent service log")
         logView.isEditable = false
@@ -356,7 +487,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         message.textColor = .secondaryLabelColor
         let stack = NSStackView(views: [title, subtitle, statusGrid,
                                         primaryButtons, maintenanceButtons,
-                                        message, logLabel, scroll])
+                                        removalButtons, message, logLabel, scroll])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -421,13 +552,25 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func enableAndAdd(_ sender: Any?) {
-        perform("Enabling the service and waiting for the IPP printer…") {
+        perform("Starting the service and waiting for the IPP printer…") {
             try self.integration.enableAndAddQueue()
         }
     }
 
+    @objc private func startService(_ sender: Any?) {
+        perform("Starting the background printer service…") {
+            try self.integration.startService()
+        }
+    }
+
+    @objc private func stopService(_ sender: Any?) {
+        perform("Stopping the background printer service…") {
+            try self.integration.stopService()
+        }
+    }
+
     @objc private func disableService(_ sender: Any?) {
-        perform("Disabling the background service…") {
+        perform("Disabling the background service at login…") {
             try self.integration.disableService()
         }
     }
@@ -448,13 +591,30 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func uninstall(_ sender: Any?) {
         let alert = NSAlert()
-        alert.messageText = "Uninstall M1005 integration?"
-        alert.informativeText = "This removes the print queue, background service, pending spool files, and service logs. The app itself can then be moved to Trash."
-        alert.addButton(withTitle: "Uninstall")
+        alert.messageText = "Completely uninstall M1005?"
+        alert.informativeText = "This removes every installed M1005 app, the print queue, current and legacy background services, pending spool files, settings, logs, and the installer receipt. An administrator password may be required."
+        alert.addButton(withTitle: "Uninstall Completely")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        perform("Removing the local integration…") {
-            try self.integration.uninstallIntegration()
+
+        message.stringValue = "Completely removing M1005…"
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try integration.uninstallCompletely()
+                DispatchQueue.main.async {
+                    let complete = NSAlert()
+                    complete.messageText = "M1005 was uninstalled"
+                    complete.informativeText = result
+                    complete.runModal()
+                    NSApplication.shared.terminate(nil)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.message.stringValue = error.localizedDescription
+                    self.refresh(nil)
+                }
+            }
         }
     }
 }
@@ -475,6 +635,10 @@ private enum M1005SetupMain {
                 case "--enable-service":
                     try integration.enableService()
                     output = "Background printer service enabled."
+                case "--start-service":
+                    output = try integration.startService()
+                case "--stop-service":
+                    output = try integration.stopService()
                 case "--add-queue":
                     try integration.addQueue()
                     output = "HP_LaserJet_M1005 added to macOS."
@@ -483,12 +647,12 @@ private enum M1005SetupMain {
                 case "--remove-queue":
                     output = try integration.removeQueue()
                 case "--uninstall":
-                    output = try integration.uninstallIntegration()
+                    output = try integration.uninstallCompletely()
                 case "--validate-bundle":
                     output = try integration.validateBundle()
                 default:
                     throw IntegrationError(message:
-                        "Usage: M1005 Setup [--status|--enable|--enable-service|--add-queue|--disable|--remove-queue|--uninstall|--validate-bundle]")
+                        "Usage: M1005 Setup [--status|--enable|--enable-service|--start-service|--stop-service|--add-queue|--disable|--remove-queue|--uninstall|--validate-bundle]")
                 }
                 print(output)
                 Foundation.exit(EXIT_SUCCESS)

@@ -16,8 +16,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#define APP_VERSION "0.5.2"
+#define APP_VERSION "0.5.3"
 #define DRIVER_NAME "hp-laserjet-m1005-600dpi"
+#define SERVICE_STOP_MARKER "service-stopped"
 #define XQX_MIME_TYPE "application/vnd.hp-xqx"
 #define A4_WIDTH 4960U
 #define PAPPL_A4_HEIGHT 7015U
@@ -38,6 +39,57 @@ typedef struct {
 } m1005_job_data_t;
 
 static char encoder_path[PATH_MAX] = "build/m1005-xqx-encode";
+
+static bool service_control_path(char *path, size_t path_size,
+                                 const char *leaf) {
+    const char *home = getenv("HOME");
+    if (home == NULL || home[0] != '/') {
+        return false;
+    }
+    int written = snprintf(path, path_size,
+                           "%s/Library/Application Support/M1005Printer/%s",
+                           home, leaf);
+    return written >= 0 && (size_t)written < path_size;
+}
+
+static bool service_is_stopped_by_user(void) {
+    char marker[PATH_MAX];
+    return service_control_path(marker, sizeof(marker), SERVICE_STOP_MARKER) &&
+           access(marker, F_OK) == 0;
+}
+
+static bool mark_service_stopped_by_user(void) {
+    char marker[PATH_MAX];
+    if (!service_control_path(marker, sizeof(marker), SERVICE_STOP_MARKER)) {
+        return false;
+    }
+
+    int descriptor = open(marker, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (descriptor < 0) {
+        return false;
+    }
+    const char contents[] = "Stopped from the menu bar. Start with the M1005 app.\n";
+    ssize_t written = write(descriptor, contents, sizeof(contents) - 1);
+    int saved_errno = errno;
+    if (close(descriptor) < 0 && written == (ssize_t)(sizeof(contents) - 1)) {
+        return false;
+    }
+    if (written != (ssize_t)(sizeof(contents) - 1)) {
+        errno = saved_errno;
+        return false;
+    }
+    return true;
+}
+
+// Optional callback used by the vendored PAPPL macOS status UI. Keeping this
+// hook in the application lets PAPPL remain useful without hard-coding M1005
+// paths into the framework itself.
+void _papplSystemStatusUIWillTerminate(void) {
+    if (!mark_service_stopped_by_user()) {
+        fprintf(stderr, "Unable to persist the user-requested service stop: %s\n",
+                strerror(errno));
+    }
+}
 
 static bool make_directory_tree(const char *path) {
     char current[PATH_MAX];
@@ -584,6 +636,12 @@ static int run_managed_service(char *program) {
         return 1;
     }
 
+    if (service_is_stopped_by_user()) {
+        fputs("M1005 printer service is stopped by the user. Open the M1005 "
+              "app to start it.\n", stderr);
+        return 0;
+    }
+
     char *managed_argv[] = {
         program,
         "server",
@@ -609,6 +667,15 @@ int main(int argc, char *argv[]) {
     }
     if (argc == 2 && strcmp(argv[1], "--managed-service") == 0) {
         return run_managed_service(argv[0]);
+    }
+    if (argc == 2 && strcmp(argv[1], "--service-stop-self-test") == 0) {
+        if (!mark_service_stopped_by_user()) {
+            fprintf(stderr, "Unable to create service stop marker: %s\n",
+                    strerror(errno));
+            return 1;
+        }
+        puts("service-stop-marker=created");
+        return 0;
     }
     if (argc == 2 && strcmp(argv[1], "--dither-self-test") == 0) {
         return dither_self_test();

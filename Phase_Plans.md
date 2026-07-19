@@ -9,10 +9,12 @@
 - Phase 4: complete; cancellation-aware USB retries, endpoint-stall handling,
   reconnect recovery, and printer power-cycle recovery validated.
 - Phase 5: development implementation and live integration complete. Version
-  0.5.2 fixes grayscale thresholding, removes application-visible bi-level
-  output, and is installed at 600 dpi/High. Preview and both Adobe Acrobat
-  grayscale cases passed physically. Developer ID signing/notarization remain
-  pending. See `PHASE5_RESULTS.md`.
+  0.5.2 fixes grayscale thresholding and removes application-visible bi-level
+  output. Version 0.5.3 adds persistent user-controlled service stopping,
+  crash-only relaunch, a printer menu-bar icon, and complete one-click
+  uninstalling. Preview and both Adobe Acrobat grayscale cases passed
+  physically. Developer ID signing/notarization remain pending. See
+  `PHASE5_RESULTS.md`.
 - Phases 6–7: not started.
 
 No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
@@ -177,6 +179,9 @@ uninstall flow, and unsigned installer are implemented and tested. Version
 0.5.2 restores the full halftone matrices, exposes tonal monochrome only,
 defaults both printer layers to 600 dpi/High, and printed the original
 grayscale photo correctly from Preview and both Adobe Acrobat checkbox modes.
+Version 0.5.3 makes service stopping persistent until Start is selected,
+preserves automatic crash recovery, uses a printer SF Symbol, and completely
+removes all installed integration with one confirmed action.
 See `PHASE5_RESULTS.md`.
 
 Create a small Mac setup application that:
