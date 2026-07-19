@@ -110,7 +110,9 @@ $(BUILD)/m1005-setup: macos/M1005SetupApp.swift | $(BUILD)
 
 $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		$(BUILD)/m1005-xqx-encode macos/Info.plist \
-		macos/com.m1005printer.service.v7.plist macos/entitlements.plist \
+		macos/com.m1005printer.service.v7.plist \
+		macos/com.m1005printer.service.v8.plist \
+		macos/com.m1005printer.service.v9.plist macos/entitlements.plist \
 		macos/uninstall_m1005.sh macos/SOURCE.md Makefile \
 		$(wildcard vendor/foo2xqx/*) \
 		vendor/foo2xqx/COPYING vendor/foo2xqx/README.md \
@@ -130,6 +132,10 @@ $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		"$(PHASE5_CONTENTS)/Resources/uninstall-m1005"
 	chmod 755 "$(PHASE5_CONTENTS)/Resources/uninstall-m1005"
 	cp macos/com.m1005printer.service.v7.plist \
+		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
+	cp macos/com.m1005printer.service.v8.plist \
+		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
+	cp macos/com.m1005printer.service.v9.plist \
 		"$(PHASE5_CONTENTS)/Library/LaunchAgents/"
 	cp vendor/foo2xqx/COPYING \
 		"$(PHASE5_CONTENTS)/Resources/Licenses/foo2xqx-GPL-2.0.txt"

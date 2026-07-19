@@ -6,7 +6,9 @@ setup="$app/Contents/MacOS/M1005 Setup"
 service="$app/Contents/Resources/m1005-printer-service"
 encoder="$app/Contents/Resources/m1005-xqx-encode"
 uninstaller="$app/Contents/Resources/uninstall-m1005"
-agent="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v7.plist"
+agent="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v9.plist"
+legacy_agent_v8="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v8.plist"
+legacy_agent_v7="$app/Contents/Library/LaunchAgents/com.m1005printer.service.v7.plist"
 test_directory=$(mktemp -d /private/tmp/m1005-phase5-test.XXXXXX)
 trap 'rm -rf "$test_directory"' EXIT HUP INT TERM
 
@@ -15,6 +17,8 @@ test -x "$service"
 test -x "$encoder"
 test -x "$uninstaller"
 test -f "$app/Contents/Resources/Source/foo2xqx/foo2xqx.c"
+test -f "$legacy_agent_v8"
+test -f "$legacy_agent_v7"
 plutil -lint "$app/Contents/Info.plist" >/dev/null
 plutil -lint "$agent" >/dev/null
 test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = \
@@ -23,13 +27,19 @@ test "$("$service" --version)" = "0.5.3"
 test "$(plutil -extract CFBundleShortVersionString raw \
     "$app/Contents/Info.plist")" = "0.5.3"
 test "$(plutil -extract CFBundleVersion raw \
-    "$app/Contents/Info.plist")" = "11"
+    "$app/Contents/Info.plist")" = "14"
+test "$(plutil -extract Label raw "$agent")" = \
+    "com.m1005printer.service.v9"
+grep -q 'removeCurrentRegistration' macos/M1005SetupApp.swift
 test "$(plutil -extract KeepAlive.SuccessfulExit raw "$agent")" = "false"
 grep -q 'printer.fill' external/pappl/pappl/system-status-macos.m
 strings "$service" | grep -q 'printer.fill'
 grep -q 'Stop Printer Service' external/pappl/pappl/system-status-macos.m
 grep -q 'service-stopped' src/m1005_printer_app.c
 grep -q 'Uninstall M1005 Completely' macos/M1005SetupApp.swift
+grep -q 'NSApplication.shared.terminate' macos/M1005SetupApp.swift
+grep -q 'lsregister' macos/uninstall_m1005.sh
+grep -q 'killall Dock' macos/uninstall_m1005.sh
 test "$(file "$setup" "$service" "$encoder" | grep -c 'arm64')" -eq 3
 dither_result=$("$service" --dither-self-test)
 test "$(printf '%s\n' "$dither_result" | grep -c '^halftone=enabled$')" -eq 1

@@ -17,9 +17,19 @@ case "$user_home" in
     /Users/*) ;;
     *) echo "Refusing unexpected home directory: $user_home" >&2; exit 64 ;;
 esac
+user_name=$(/usr/bin/id -un "$user_uid")
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
+run_as_target_user() {
+    if [ "$(/usr/bin/id -u)" -eq 0 ]; then
+        /bin/launchctl asuser "$user_uid" /usr/bin/sudo -u "$user_name" "$@"
+    else
+        "$@"
+    fi
+}
 
 queue_name=HP_LaserJet_M1005
-labels='com.m1005printer.service com.m1005printer.service.v2 com.m1005printer.service.v3 com.m1005printer.service.v4 com.m1005printer.service.v5 com.m1005printer.service.v6 com.m1005printer.service.v7'
+labels='com.m1005printer.service com.m1005printer.service.v2 com.m1005printer.service.v3 com.m1005printer.service.v4 com.m1005printer.service.v5 com.m1005printer.service.v6 com.m1005printer.service.v7 com.m1005printer.service.v8 com.m1005printer.service.v9'
 
 for label in $labels; do
     /bin/launchctl bootout "gui/$user_uid/$label" >/dev/null 2>&1 || true
@@ -55,6 +65,10 @@ remove_app_if_expected() {
     bundle_id=$(/usr/bin/plutil -extract CFBundleIdentifier raw \
         "$app_path/Contents/Info.plist" 2>/dev/null || true)
     if [ "$bundle_id" = "com.m1005printer.setup" ]; then
+        if [ -x "$lsregister" ]; then
+            run_as_target_user "$lsregister" -u "$app_path" \
+                >/dev/null 2>&1 || true
+        fi
         /bin/rm -rf -- "$app_path"
     fi
 }
@@ -86,5 +100,10 @@ remove_app_if_expected "$user_home/Applications/M1005Printer.app"
 remove_app_if_expected "$user_home/Applications/HP LaserJet M1005.app"
 
 /usr/sbin/pkgutil --forget com.m1005printer.pkg >/dev/null 2>&1 || true
+
+# The setup app terminates immediately after this helper exits. Refreshing the
+# per-user UI removes stale Launchpad/Finder entries for the deleted bundle.
+run_as_target_user /usr/bin/killall Dock >/dev/null 2>&1 || true
+run_as_target_user /usr/bin/killall Finder >/dev/null 2>&1 || true
 
 echo "M1005 apps, printer queue, services, package receipt, data, and logs were removed."

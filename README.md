@@ -178,7 +178,11 @@ Preview and from Adobe Acrobat Reader both with and without its grayscale
 checkbox. Version 0.5.3 makes menu-bar Stop persistent until the user starts
 the service again from the setup app, retains automatic crash recovery, uses
 Apple's printer SF Symbol in the menu bar, and adds complete one-click removal
-of the app, queue, services, data, logs, and package receipt. Developer ID
+of the app, queue, services, data, logs, and package receipt. It also reports a
+connected-but-busy USB device accurately, refreshes Launch Services after
+uninstall so deleted bundles do not remain visible, migrates stale development
+Login Item records, and replaces an unhealthy ServiceManagement registration
+whenever the local IPP port is not actually running. Developer ID
 signing and Apple notarization remain pending because
 no Developer ID identities are installed on this Mac.
 `make phase5-release` performs the complete signed/notarized release workflow

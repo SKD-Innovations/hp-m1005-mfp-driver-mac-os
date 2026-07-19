@@ -17,8 +17,14 @@ cannot select or infer bi-level output. The same tonal document was reprinted
 from Acrobat both with and without that checkbox, and the user confirmed that
 its photo reproduces correctly in both cases. Version 0.5.3 corrects the
 LaunchAgent lifecycle so a user-requested Stop persists until Start is chosen,
-while unsuccessful exits still recover automatically. It also supplies an
-Apple printer SF Symbol for the menu bar and a complete one-click uninstaller.
+while unsuccessful exits still recover automatically. It supplies an Apple
+printer SF Symbol, reports a physically connected USB printer whose libusb
+access is temporarily busy, and provides a complete one-click uninstaller that
+unregisters the deleted bundle and refreshes Dock/Finder. It also migrates
+stale development Login Item records that can cause `EX_CONFIG` spawn failures
+after reinstall. Start treats port 8765 as authoritative and replaces an
+enabled, missing, or otherwise unhealthy current registration before launching
+the service.
 The installed development build
 reports:
 

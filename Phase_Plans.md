@@ -11,8 +11,10 @@
 - Phase 5: development implementation and live integration complete. Version
   0.5.2 fixes grayscale thresholding and removes application-visible bi-level
   output. Version 0.5.3 adds persistent user-controlled service stopping,
-  crash-only relaunch, a printer menu-bar icon, and complete one-click
-  uninstalling. Preview and both Adobe Acrobat grayscale cases passed
+  crash-only relaunch, a printer menu-bar icon, complete one-click uninstalling,
+  stale ServiceManagement registration repair, connected-but-busy USB
+  diagnostics, and Launch Services refresh after removal. Preview and
+  both Adobe Acrobat grayscale cases passed
   physically. Developer ID signing/notarization remain pending. See
   `PHASE5_RESULTS.md`.
 - Phases 6–7: not started.
@@ -180,8 +182,11 @@ uninstall flow, and unsigned installer are implemented and tested. Version
 defaults both printer layers to 600 dpi/High, and printed the original
 grayscale photo correctly from Preview and both Adobe Acrobat checkbox modes.
 Version 0.5.3 makes service stopping persistent until Start is selected,
-preserves automatic crash recovery, uses a printer SF Symbol, and completely
-removes all installed integration with one confirmed action.
+preserves automatic crash recovery, uses a printer SF Symbol, repairs stale
+ServiceManagement registrations, and reports USB devices that are physically
+connected but temporarily unavailable to libusb. Complete uninstall removes
+all installed integration, unregisters the app bundle, and refreshes the
+per-user Dock/Finder state with one confirmed action.
 See `PHASE5_RESULTS.md`.
 
 Create a small Mac setup application that:

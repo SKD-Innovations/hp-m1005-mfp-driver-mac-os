@@ -3,6 +3,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <IOKit/IOKitLib.h>
 #include <mach-o/dyld.h>
 #include <pappl/pappl.h>
 #include <signal.h>
@@ -39,6 +41,52 @@ typedef struct {
 } m1005_job_data_t;
 
 static char encoder_path[PATH_MAX] = "build/m1005-xqx-encode";
+
+static bool cf_number_matches(CFTypeRef value, int expected) {
+    if (value == NULL || CFGetTypeID(value) != CFNumberGetTypeID()) {
+        return false;
+    }
+    int actual = 0;
+    return CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &actual) &&
+           actual == expected;
+}
+
+static bool m1005_present_in_ioregistry(void) {
+    CFMutableDictionaryRef matching = IOServiceMatching("IOUSBHostDevice");
+    if (matching == NULL) {
+        return false;
+    }
+
+    io_iterator_t iterator = IO_OBJECT_NULL;
+    kern_return_t status = IOServiceGetMatchingServices(kIOMainPortDefault,
+                                                         matching, &iterator);
+    if (status != KERN_SUCCESS) {
+        return false;
+    }
+
+    bool present = false;
+    io_service_t service;
+    while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+        CFTypeRef vendor = IORegistryEntryCreateCFProperty(
+            service, CFSTR("idVendor"), kCFAllocatorDefault, 0);
+        CFTypeRef product = IORegistryEntryCreateCFProperty(
+            service, CFSTR("idProduct"), kCFAllocatorDefault, 0);
+        present = cf_number_matches(vendor, 0x03f0) &&
+                  cf_number_matches(product, 0x3b17);
+        if (vendor != NULL) {
+            CFRelease(vendor);
+        }
+        if (product != NULL) {
+            CFRelease(product);
+        }
+        IOObjectRelease(service);
+        if (present) {
+            break;
+        }
+    }
+    IOObjectRelease(iterator);
+    return present;
+}
 
 static bool service_control_path(char *path, size_t path_size,
                                  const char *leaf) {
@@ -662,8 +710,16 @@ int main(int argc, char *argv[]) {
     }
     if (argc == 2 && strcmp(argv[1], "--usb-status") == 0) {
         bool present = m1005PapplUSBIsPresent();
-        puts(present ? "connected" : "disconnected");
-        return present ? 0 : 1;
+        if (present) {
+            puts("connected");
+            return 0;
+        }
+        if (m1005_present_in_ioregistry()) {
+            puts("connected-busy");
+            return 2;
+        }
+        puts("disconnected");
+        return 1;
     }
     if (argc == 2 && strcmp(argv[1], "--managed-service") == 0) {
         return run_managed_service(argv[0]);

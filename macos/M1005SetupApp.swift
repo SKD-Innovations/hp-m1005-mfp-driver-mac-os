@@ -3,15 +3,21 @@ import Foundation
 import ServiceManagement
 
 private enum Product {
-    static let servicePlist = "com.m1005printer.service.v7.plist"
-    static let serviceLabel = "com.m1005printer.service.v7"
+    static let servicePlist = "com.m1005printer.service.v9.plist"
+    static let serviceLabel = "com.m1005printer.service.v9"
+    static let legacyServicePlists = [
+        "com.m1005printer.service.v7.plist",
+        "com.m1005printer.service.v8.plist"
+    ]
     static let legacyServiceLabels = [
         "com.m1005printer.service",
         "com.m1005printer.service.v2",
         "com.m1005printer.service.v3",
         "com.m1005printer.service.v4",
         "com.m1005printer.service.v5",
-        "com.m1005printer.service.v6"
+        "com.m1005printer.service.v6",
+        "com.m1005printer.service.v7",
+        "com.m1005printer.service.v8"
     ]
     static let queueName = "HP_LaserJet_M1005"
     static let printerName = "HP LaserJet M1005 MFP (USB)"
@@ -130,8 +136,15 @@ private final class IntegrationManager {
         guard FileManager.default.isExecutableFile(atPath: helperURL.path) else {
             return "helper missing"
         }
-        return run(helperURL.path, ["--usb-status"]).status == 0
-            ? "connected" : "disconnected"
+        let result = run(helperURL.path, ["--usb-status"])
+        switch result.status {
+        case 0:
+            return "connected"
+        case 2:
+            return "connected (USB access busy)"
+        default:
+            return "disconnected"
+        }
     }
 
     private func serverIsReady(fullIPPCheck: Bool = false) -> Bool {
@@ -169,8 +182,28 @@ private final class IntegrationManager {
 
     private func cleanupLegacyServices() {
         let domain = "gui/\(getuid())"
+        for plistName in Product.legacyServicePlists {
+            let legacy = SMAppService.agent(plistName: plistName)
+            if legacy.status != .notRegistered {
+                try? legacy.unregister()
+            }
+        }
         for label in Product.legacyServiceLabels {
             _ = run("/bin/launchctl", ["bootout", "\(domain)/\(label)"])
+        }
+    }
+
+    private func removeCurrentRegistration() {
+        if service.status != .notRegistered {
+            try? service.unregister()
+        }
+        let target = "gui/\(getuid())/\(Product.serviceLabel)"
+        _ = run("/bin/launchctl", ["bootout", target])
+        for _ in 0..<20 {
+            if run("/bin/launchctl", ["print", target]).status != 0 {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.1)
         }
     }
 
@@ -197,7 +230,26 @@ private final class IntegrationManager {
                                                 withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: logDirectoryURL,
                                                 withIntermediateDirectories: true)
-        if service.status == .notRegistered || service.status == .notFound {
+
+        // An ad-hoc development update can leave ServiceManagement reporting
+        // an enabled/not-found item whose launchd job exits with EX_CONFIG.
+        // Port health is authoritative: replace any registration that cannot
+        // actually provide the local IPP service.
+        if !serverIsReady() {
+            removeCurrentRegistration()
+            do {
+                try service.register()
+            } catch {
+                removeCurrentRegistration()
+                Thread.sleep(forTimeInterval: 0.5)
+                do {
+                    try service.register()
+                } catch {
+                    throw IntegrationError(message:
+                        "Unable to register the background printer service: \(error.localizedDescription)")
+                }
+            }
+        } else if service.status == .notRegistered {
             try service.register()
         }
         if service.status == .requiresApproval {
@@ -289,8 +341,13 @@ private final class IntegrationManager {
 
     func disableService() throws -> String {
         try setStoppedByUser(true)
-        if service.status == .enabled || service.status == .requiresApproval {
-            try service.unregister()
+        if service.status != .notRegistered {
+            do {
+                try service.unregister()
+            } catch where service.status == .notFound {
+                let target = "gui/\(getuid())/\(Product.serviceLabel)"
+                _ = run("/bin/launchctl", ["bootout", target])
+            }
         }
         _ = waitForServer(running: false)
         return "Background printer service disabled at login."
@@ -601,12 +658,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
-                let result = try integration.uninstallCompletely()
+                _ = try integration.uninstallCompletely()
                 DispatchQueue.main.async {
-                    let complete = NSAlert()
-                    complete.messageText = "M1005 was uninstalled"
-                    complete.informativeText = result
-                    complete.runModal()
                     NSApplication.shared.terminate(nil)
                 }
             } catch {
