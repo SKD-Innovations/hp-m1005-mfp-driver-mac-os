@@ -2,11 +2,23 @@
 
 Date: 2026-07-18  
 Target: macOS 26.5.2, Apple Silicon (`arm64`)  
-Application version: `0.5.3`
+Last physically accepted version: `0.5.3`
+
+Current development version: `0.5.4`
+
+The 0.5.4 installer was signed with Developer ID, accepted by Apple's
+notary service, stapled, and accepted by Gatekeeper on 2026-11-01. Installation
+and uninstall of this signed package on a separate Mac remain to be validated.
+
+Version 0.5.4 changes uninstall ordering: administrator authorization is
+requested before cleanup, the service is unregistered in the user's session,
+and the privileged helper removes the queue and app. The helper reports a
+failure if the running app remains. A physical uninstall/reinstall of 0.5.4
+is still required; the 0.5.3 uninstall is reported to leave the app installed.
 
 ## Result
 
-**DEVELOPMENT AND PHYSICAL PASS; RELEASE SIGNING PENDING.** The
+**DEVELOPMENT AND PHYSICAL PASS FOR 0.5.3; 0.5.4 SIGNED AND NOTARIZED.** The
 native setup app, background service, driverless macOS queue, managed state/log
 paths, uninstall flow, self-contained app bundle, and unsigned installer have
 passed on the target Mac. A later document with a grayscale portrait exposed a
@@ -35,9 +47,8 @@ server=running
 queue=installed
 ```
 
-The final Developer ID signature, installer signature, Apple notarization,
-and stapled ticket cannot be produced yet because this Mac has no Developer ID
-Application or Developer ID Installer identity installed.
+At the time of the 0.5.3 acceptance record, Developer ID identities were not
+available. The 0.5.4 package was subsequently signed and notarized.
 
 ## Installed development integration
 

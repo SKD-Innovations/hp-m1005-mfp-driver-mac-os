@@ -19,6 +19,11 @@
   `PHASE5_RESULTS.md`.
 - Phases 6–7: not started.
 
+Version 0.5.4 revises uninstall ordering after a report that the app remained installed;
+physical uninstall and reinstall acceptance for that revision is pending.
+The 0.5.4 installer was subsequently signed, notarized, and stapled on
+2026-11-01; installation of that signed package on another Mac remains pending.
+
 No ready-to-install, signed, notarized driver was found on GitHub that is verified for HP LaserJet M1005 MFP on macOS Tahoe 26.5. The best code base is usable for building one, but its existing Mac installation method is obsolete.
 
 ## 1. Compatible driver for macOS 26.5

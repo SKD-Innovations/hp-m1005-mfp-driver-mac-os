@@ -31,6 +31,9 @@ run_as_target_user() {
 queue_name=HP_LaserJet_M1005
 labels='com.m1005printer.service com.m1005printer.service.v2 com.m1005printer.service.v3 com.m1005printer.service.v4 com.m1005printer.service.v5 com.m1005printer.service.v6 com.m1005printer.service.v7 com.m1005printer.service.v8 com.m1005printer.service.v9'
 
+# Unregister SMAppService in the user's session after authorization succeeds.
+run_as_target_user "$current_app/Contents/MacOS/M1005 Setup" --prepare-uninstall
+
 for label in $labels; do
     /bin/launchctl bootout "gui/$user_uid/$label" >/dev/null 2>&1 || true
 done
@@ -93,17 +96,22 @@ for report in "$user_home"/Library/Application\ Support/CrashReporter/m1005-prin
     [ -e "$report" ] && /bin/rm -f -- "$report"
 done
 
+for candidate in /Applications/M1005Printerv*.app "$user_home"/Applications/M1005Printerv*.app; do
+    remove_app_if_expected "$candidate"
+done
 remove_app_if_expected "$current_app"
 remove_app_if_expected "/Applications/M1005Printer.app"
 remove_app_if_expected "/Applications/HP LaserJet M1005.app"
 remove_app_if_expected "$user_home/Applications/M1005Printer.app"
 remove_app_if_expected "$user_home/Applications/HP LaserJet M1005.app"
 
-/usr/sbin/pkgutil --forget com.m1005printer.pkg >/dev/null 2>&1 || true
+if /usr/sbin/pkgutil --pkg-info com.m1005printer.pkg >/dev/null 2>&1; then
+    /usr/sbin/pkgutil --forget com.m1005printer.pkg >/dev/null
+fi
 
 # The setup app terminates immediately after this helper exits. Refreshing the
 # per-user UI removes stale Launchpad/Finder entries for the deleted bundle.
 run_as_target_user /usr/bin/killall Dock >/dev/null 2>&1 || true
 run_as_target_user /usr/bin/killall Finder >/dev/null 2>&1 || true
 
-echo "M1005 apps, printer queue, services, package receipt, data, and logs were removed."
+echo "Installed M1005 apps, printer queue, services, package receipt, data, and logs were removed."

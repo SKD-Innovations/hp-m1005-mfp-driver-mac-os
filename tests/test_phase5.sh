@@ -23,11 +23,11 @@ plutil -lint "$app/Contents/Info.plist" >/dev/null
 plutil -lint "$agent" >/dev/null
 test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = \
     "com.m1005printer.setup"
-test "$("$service" --version)" = "0.5.3"
+test "$("$service" --version)" = "0.5.4"
 test "$(plutil -extract CFBundleShortVersionString raw \
-    "$app/Contents/Info.plist")" = "0.5.3"
+    "$app/Contents/Info.plist")" = "0.5.4"
 test "$(plutil -extract CFBundleVersion raw \
-    "$app/Contents/Info.plist")" = "14"
+    "$app/Contents/Info.plist")" = "15"
 test "$(plutil -extract Label raw "$agent")" = \
     "com.m1005printer.service.v9"
 grep -q 'removeCurrentRegistration' macos/M1005SetupApp.swift

@@ -25,9 +25,11 @@ PAPPL_STATIC_LIBS := $(PAPPL_LIB) $(CUPS_LIBS) $(LIBUSB_STATIC) \
 	$(OPENSSL_STATIC_DIR)/libssl.a $(OPENSSL_STATIC_DIR)/libcrypto.a \
 	-framework AppKit -framework CoreFoundation -framework SystemConfiguration \
 	-framework IOKit -framework Security -lpam -ldl -lpthread
+APP_VERSION := $(shell /usr/bin/plutil -extract CFBundleShortVersionString raw macos/Info.plist)
+APP_NAME := M1005Printerv$(patsubst 0.%,%,$(APP_VERSION))
 PHASE5_APP := $(BUILD)/M1005Printer.app
 PHASE5_CONTENTS := $(PHASE5_APP)/Contents
-PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-0.5.3-unsigned.pkg
+PHASE5_PACKAGE := $(BUILD)/HP-LaserJet-M1005-$(APP_VERSION)-unsigned.pkg
 
 .PHONY: all clean phase2 phase2-test phase3 phase3-test phase4 phase4-test \
 	phase5 phase5-test phase5-package phase5-release probe claim test validate
@@ -123,6 +125,8 @@ $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 		"$(PHASE5_CONTENTS)/Resources/Licenses" \
 		"$(PHASE5_CONTENTS)/Resources/Source"
 	cp macos/Info.plist "$(PHASE5_CONTENTS)/Info.plist"
+	/usr/bin/plutil -replace CFBundleName -string "$(APP_NAME)" "$(PHASE5_CONTENTS)/Info.plist"
+	/usr/bin/plutil -replace CFBundleDisplayName -string "$(APP_NAME)" "$(PHASE5_CONTENTS)/Info.plist"
 	cp $(BUILD)/m1005-setup "$(PHASE5_CONTENTS)/MacOS/M1005 Setup"
 	cp $(BUILD)/m1005-printer-service \
 		"$(PHASE5_CONTENTS)/Resources/m1005-printer-service"
@@ -156,11 +160,16 @@ $(PHASE5_APP): $(BUILD)/m1005-setup $(BUILD)/m1005-printer-service \
 	codesign --force --options runtime --timestamp=none --sign - \
 		--entitlements macos/entitlements.plist "$@"
 
-$(PHASE5_PACKAGE): $(PHASE5_APP)
+$(PHASE5_PACKAGE): $(PHASE5_APP) macos/package-components.plist
 	rm -f "$@"
-	COPYFILE_DISABLE=1 pkgbuild --component "$(PHASE5_APP)" \
+	rm -rf "$(BUILD)/phase5-payload"
+	mkdir -p "$(BUILD)/phase5-payload"
+	COPYFILE_DISABLE=1 ditto "$(PHASE5_APP)" "$(BUILD)/phase5-payload/$(APP_NAME).app"
+	sed "s/@APP_NAME@/$(APP_NAME)/g" macos/package-components.plist > "$(BUILD)/phase5-components.plist"
+	COPYFILE_DISABLE=1 pkgbuild --root "$(BUILD)/phase5-payload" \
+		--component-plist "$(BUILD)/phase5-components.plist" \
 		--install-location /Applications \
-		--identifier com.m1005printer.pkg --version 0.5.3 "$@"
+		--identifier com.m1005printer.pkg --version "$(APP_VERSION)" "$@"
 
 phase5-package: $(PHASE5_PACKAGE)
 

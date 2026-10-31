@@ -190,3 +190,9 @@ once those credentials are available.
 
 See `PHASE5_RESULTS.md` for installed paths, live results, build products,
 release requirements, and the exact signing/notarization boundary.
+
+Version 0.5.4 revises the uninstall flow to authorize privileged cleanup
+before removing the queue or user data and to check that the app was removed.
+Physical uninstall and reinstall acceptance of this revision is pending.
+The 0.5.4 release installer has been Developer ID signed, notarized, and
+stapled. See `SIGNING_AND_NOTARIZATION.md` for the release procedure.
