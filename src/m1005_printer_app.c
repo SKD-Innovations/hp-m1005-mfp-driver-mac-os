@@ -18,7 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define APP_VERSION "0.5.3"
+#define APP_VERSION "0.5.4"
 #define DRIVER_NAME "hp-laserjet-m1005-600dpi"
 #define SERVICE_STOP_MARKER "service-stopped"
 #define XQX_MIME_TYPE "application/vnd.hp-xqx"

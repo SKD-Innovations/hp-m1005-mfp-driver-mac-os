@@ -11,8 +11,10 @@ fi
 project_directory=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 release_directory="$project_directory/build/release"
 source_app="$project_directory/build/M1005Printer.app"
-release_app="$release_directory/M1005Printer.app"
-release_package="$release_directory/HP-LaserJet-M1005-0.5.3.pkg"
+app_version=$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$project_directory/macos/Info.plist")
+app_name="M1005Printerv${app_version#0.}"
+release_app="$release_directory/$app_name.app"
+release_package="$release_directory/HP-LaserJet-M1005-$app_version.pkg"
 entitlements="$project_directory/macos/entitlements.plist"
 
 cd "$project_directory"
@@ -34,9 +36,13 @@ codesign --force --options runtime --timestamp \
     --sign "$DEVELOPER_ID_APPLICATION" "$release_app"
 codesign --verify --deep --strict --verbose=2 "$release_app"
 
-COPYFILE_DISABLE=1 pkgbuild --component "$release_app" \
+mkdir -p "$release_directory/payload"
+COPYFILE_DISABLE=1 ditto "$release_app" "$release_directory/payload/$app_name.app"
+sed "s/@APP_NAME@/$app_name/g" macos/package-components.plist > "$release_directory/components.plist"
+COPYFILE_DISABLE=1 pkgbuild --root "$release_directory/payload" \
+    --component-plist "$release_directory/components.plist" \
     --install-location /Applications \
-    --identifier com.m1005printer.pkg --version 0.5.3 \
+    --identifier com.m1005printer.pkg --version "$app_version" \
     --sign "$DEVELOPER_ID_INSTALLER" "$release_package"
 
 xcrun notarytool submit "$release_package" \

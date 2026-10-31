@@ -396,11 +396,6 @@ private final class IntegrationManager {
     }
 
     func uninstallCompletely() throws -> String {
-        _ = try removeQueue()
-        _ = try disableService()
-        cleanupLegacyServices()
-        try removeManagedData()
-
         guard FileManager.default.isExecutableFile(atPath: uninstallerURL.path) else {
             throw IntegrationError(message: "The bundled complete uninstaller is missing.")
         }
@@ -418,6 +413,22 @@ private final class IntegrationManager {
         }
         return result.output.isEmpty
             ? "M1005 was completely uninstalled." : result.output
+    }
+
+    func prepareUninstall() throws -> String {
+        if service.status != .notRegistered {
+            do {
+                try service.unregister()
+            } catch where service.status == .notFound {
+                removeCurrentRegistration()
+            } catch {
+                throw IntegrationError(message:
+                    "Unable to unregister the background printer service: \(error.localizedDescription)")
+            }
+        }
+        _ = waitForServer(running: false)
+        cleanupLegacyServices()
+        return "Background printer services unregistered for uninstall."
     }
 
     func recentLog() -> String {
@@ -468,6 +479,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         timer?.invalidate()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if !flag || window.isMiniaturized {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+        }
+        return true
+    }
+
     private func label(_ title: String) -> NSTextField {
         let field = NSTextField(labelWithString: title)
         field.font = .systemFont(ofSize: 13, weight: .medium)
@@ -486,6 +508,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false)
+        window.isReleasedWhenClosed = false
         window.title = "HP LaserJet M1005 Setup"
         window.center()
 
@@ -697,6 +720,8 @@ private enum M1005SetupMain {
                     output = "HP_LaserJet_M1005 added to macOS."
                 case "--disable":
                     output = try integration.disableService()
+                case "--prepare-uninstall":
+                    output = try integration.prepareUninstall()
                 case "--remove-queue":
                     output = try integration.removeQueue()
                 case "--uninstall":
